@@ -160,30 +160,43 @@
                 return this._div;
             };
             title.update = function () {
-                this._div.innerHTML = '<h2>Hanap-Bidet: UPD Edition</h2>';
+                this._div.innerHTML = '<h2>UPD CRtography</h2>';
             };
             title.addTo(map);
-            var abstract = new L.Control({'position':'bottomleft'});
-            abstract.onAdd = function (map) {
-                this._div = L.DomUtil.create('div',
-                'leaflet-control abstract');
-                this._div.id = 'abstract'
-                    this._div.setAttribute("onmouseenter", "abstract.show()");
-                    this._div.setAttribute("onmouseleave", "abstract.hide()");
-                    this.hide();
-                    return this._div;
-                };
-                abstract.hide = function () {
-                    this._div.classList.remove("abstractUncollapsed");
-                    this._div.classList.add("abstract");
-                    this._div.innerHTML = 'i'
-                }
-                abstract.show = function () {
-                    this._div.classList.remove("abstract");
-                    this._div.classList.add("abstractUncollapsed");
-                    this._div.innerHTML = 'This map provides a guide to comfort room (CR) locations across the UPD campus, highlighting features such as bidet availability, gender-specific and all-gender access, and accessibility. The main goal is to help users—especially students and staff—easily find clean, inclusive, and accessible facilities throughout campus.<br />While the primary audience is the UPD community, this map is also useful for the public, including joggers and visitors who frequent the campus. Access to safe and sanitary restrooms supports public health, comfort, and dignity—especially in a large, active campus like UP Diliman.<br />The main data source for this map is a Philippine Collegian Facebook post, available here:  https://www.facebook.com/share/p/1HwxPg9ETt/';
-            };
-            abstract.addTo(map);
+            var abstract = new L.Control({ position: 'bottomleft' });
+
+abstract.onAdd = function (map) {
+    this._div = L.DomUtil.create('div', 'leaflet-control abstract');
+    this._div.id = 'abstract';
+
+    // Start collapsed
+    this.collapsed = true;
+    this.update();
+
+    // Attach click event to toggle
+    this._div.onclick = () => {
+        this.collapsed = !this.collapsed;
+        this.update();
+    };
+
+    return this._div;
+};
+
+abstract.update = function () {
+    if (this.collapsed) {
+        this._div.classList.remove("abstractUncollapsed");
+        this._div.classList.add("abstract");
+        this._div.innerHTML = 'i';
+    } else {
+        this._div.classList.remove("abstract");
+        this._div.classList.add("abstractUncollapsed");
+        this._div.innerHTML = `This map provides a guide to comfort room locations across the UPD campus, highlighting features such as bidet availability, gender-specific and all-gender access, and accessibility. The main goal is to help users—especially students and staff—easily find comfortable, inclusive, and accessible facilities throughout campus.<br /><br />
+        While the primary audience is the UPD community, this map is also useful for the public, including joggers and visitors who frequent the campus. Access to safe and sanitary restrooms supports public health, comfort, and dignity—especially in a large, active campus like UP Diliman.<br /><br />
+        The main data source for this map is a <a href="https://www.facebook.com/share/p/1HwxPg9ETt/" target="_blank">Philippine Collegian Facebook post</a>.`;
+    }
+};
+
+abstract.addTo(map);
         var baseMaps = {};
         L.control.layers(
     {}, // Empty baseMaps object to hide all base layer toggles
