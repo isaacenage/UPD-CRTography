@@ -90,20 +90,6 @@
 	     box-sizing: border-box;
 	z-index: 800;
 	}
-
-	#togglePublic {
-		position: absolute;
-		top: 120px;  /* Adjust based on layer control height */
-		right: 20px;
-		z-index: 1001; /* Higher than layer control */
-		background: #F7FF19;
-		border: 1px solid rgba(0,0,0,0.2);
-		border-radius: 5px;
-		padding: 8px 12px;
-		box-shadow: 0 1px 5px rgba(0,0,0,0.4);
-		font: 12px/1.5 'Helvetica Neue', Arial, Helvetica, sans-serif;
-		cursor: pointer;
-	}
 	
 /* workaround for https://bugzilla.mozilla.org/show_bug.cgi?id=888319 */
 .leaflet-overlay-pane svg {
