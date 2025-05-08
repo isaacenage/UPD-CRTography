@@ -22,23 +22,10 @@
     <body>
         <div id="map">
         </div>
-
-        <button id="togglePublic" onclick="togglePublicFilter()" 
-        style="position: absolute; 
-               top: 160px;
-               right: 10px; 
-               z-index: 1000;
-               padding: 6px 10px;
-               font: 12px/1.5 'Helvetica Neue', Arial, Helvetica, sans-serif;
-               background: #F7FF19;
-               border: 1px solid rgba(0,0,0,0.2);
-               border-radius: 5px;
-               cursor: pointer;
-               box-shadow: 0 1px 5px rgba(0,0,0,0.4);
-               transition: all 0.2s ease;
-               color: #333;">
-    All Buildings View
-</button>
+        <div class="leaflet-control-container">
+            <iframe ...></iframe>
+            <button id="togglePublic" onclick="togglePublicFilter()">Show Public Only</button>
+          </div>
 
         <script src="js/zachenage.js"></script>
         <script src="js/leaflet.js"></script><script src="js/L.Control.Locate.min.js"></script>
