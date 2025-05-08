@@ -391,7 +391,7 @@ svg.leaflet-image-layer.leaflet-interactive path {
 	border-top: 1px solid #ddd;
 	margin: 5px -10px 5px -6px;
 	}
-
+	
 /* Default icon URLs */
 .leaflet-default-icon-path {
 	background-image: url(images/marker-icon.png);
