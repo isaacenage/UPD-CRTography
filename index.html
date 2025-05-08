@@ -10,6 +10,7 @@
         <link rel="stylesheet" href="css/zachenage.css"><link rel="stylesheet" href="css/fontawesome-all.min.css">
         <style>
         html, body, #map {
+            position: relative;
             width: 100%;
             height: 100%;
             padding: 0;
@@ -21,6 +22,24 @@
     <body>
         <div id="map">
         </div>
+
+        <button id="togglePublic" onclick="togglePublicFilter()" 
+        style="position: absolute; 
+               top: 13%;
+               right: 10px; 
+               z-index: 1000;
+               padding: 6px 10px;
+               font: 12px/1.5 'Helvetica Neue', Arial, Helvetica, sans-serif;
+               background: #F7FF19;
+               border: 1px solid rgba(0,0,0,0.2);
+               border-radius: 5px;
+               cursor: pointer;
+               box-shadow: 0 1px 5px rgba(0,0,0,0.4);
+               transition: all 0.2s ease;
+               color: #333;">
+    All Buildings View
+</button>
+
         <script src="js/zachenage.js"></script>
         <script src="js/leaflet.js"></script><script src="js/L.Control.Locate.min.js"></script>
         <script src="js/leaflet.rotatedMarker.js"></script>
@@ -66,6 +85,7 @@
                 map.fitBounds(bounds_group.getBounds());
             }
         }
+
         map.createPane('pane_Basemap_0');
         map.getPane('pane_Basemap_0').style.zIndex = 400;
         var layer_Basemap_0 = L.tileLayer('http://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png', {
@@ -153,6 +173,64 @@
         });
         bounds_group.addLayer(layer_UPBuildings_1);
         map.addLayer(layer_UPBuildings_1);
+        let isPublicFilterActive = false;
+let originalFeatures = JSON.parse(JSON.stringify(json_UPBuildings_1.features));
+
+function togglePublicFilter() {
+    const button = document.getElementById('togglePublic');
+    if (!isPublicFilterActive) {
+        // Filter to public access
+        const filtered = originalFeatures.filter(feature => 
+            feature.properties.Access === "Public"
+        );
+        layer_UPBuildings_1.clearLayers();
+        layer_UPBuildings_1.addData(filtered);
+        
+        // RE-BIND LABELS AFTER FILTERING
+        var i = 0;
+        layer_UPBuildings_1.eachLayer(function(layer) {
+            layer.bindTooltip((layer.feature.properties['Acronym'] !== null ? 
+                String('<div style="color: #ffffff; font-size: 8pt; font-weight: bold; font-family: \'MS Shell Dlg 2\', sans-serif;">' + 
+                layer.feature.properties['Acronym']) + '</div>' : ''), {
+                permanent: true,
+                offset: [-0, -16],
+                className: 'css_UPBuildings_1'
+            });
+            labels.push(layer);
+            totalMarkers += 1;
+            layer.added = true;
+            addLabel(layer, i);
+            i++;
+        });
+        
+        button.textContent = 'Public Only View';
+    } else {
+        // Restore original
+        layer_UPBuildings_1.clearLayers();
+        layer_UPBuildings_1.addData(originalFeatures);
+        
+        // RE-BIND LABELS AFTER RESTORING
+        var i = 0;
+        layer_UPBuildings_1.eachLayer(function(layer) {
+            layer.bindTooltip((layer.feature.properties['Acronym'] !== null ? 
+                String('<div style="color: #ffffff; font-size: 8pt; font-weight: bold; font-family: \'MS Shell Dlg 2\', sans-serif;">' + 
+                layer.feature.properties['Acronym']) + '</div>' : ''), {
+                permanent: true,
+                offset: [-0, -16],
+                className: 'css_UPBuildings_1'
+            });
+            labels.push(layer);
+            totalMarkers += 1;
+            layer.added = true;
+            addLabel(layer, i);
+            i++;
+        });
+        
+        button.textContent = 'All Buildings View';
+    }
+    isPublicFilterActive = !isPublicFilterActive;
+    resetLabels([layer_UPBuildings_1]); // Call your existing label reset function
+}
             var title = new L.Control();
             title.onAdd = function (map) {
                 this._div = L.DomUtil.create('div', 'info');
@@ -215,7 +293,7 @@ abstract.addTo(map);
             const centroid = layer.getBounds().getCenter();
     
     layer.bindTooltip((layer.feature.properties['Acronym'] !== null ? 
-        String('<div style="color: #ffffff; font-size: 8pt; font-weight: bold; font-family: \'MS Shell Dlg 2\', sans-serif;">' + 
+        String('<div style="color: #ffffff; font-size: 6pt; font-weight: regular; font-family: \'MS Shell Dlg 2\', sans-serif;">' + 
         layer.feature.properties['Acronym']) + '</div>' : ''), {
         permanent: true,
         className: 'css_UPBuildings_1',
