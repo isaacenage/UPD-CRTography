@@ -45,8 +45,8 @@ export const viewport: Viewport = {
   // viewportFit: "cover" is the load-bearing line — without it,
   // env(safe-area-inset-*) silently returns 0 on iPhone.
   viewportFit: "cover",
-  maximumScale: 5,
-  userScalable: true,
+  maximumScale: 1,
+  userScalable: false,
 };
 
 export default function RootLayout({
