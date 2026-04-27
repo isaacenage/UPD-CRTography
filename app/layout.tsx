@@ -25,6 +25,15 @@ export const metadata: Metadata = {
     capable: true,
     statusBarStyle: "black-translucent",
     title: "Hanap-Bidet",
+    startupImage: ["/icons/logo.svg"],
+  },
+  icons: {
+    icon: [{ url: "/icons/logo.svg", type: "image/svg+xml", sizes: "any" }],
+    shortcut: [{ url: "/icons/logo.svg", type: "image/svg+xml" }],
+    apple: [{ url: "/icons/logo.svg", type: "image/svg+xml", sizes: "any" }],
+    other: [
+      { rel: "mask-icon", url: "/icons/logo.svg", color: "#7B1113" },
+    ],
   },
   formatDetection: { telephone: false },
 };

@@ -17,16 +17,22 @@ export default function manifest(): MetadataRoute.Manifest {
     lang: "en",
     icons: [
       {
-        src: "/icons/icon.svg",
+        src: "/icons/logo.svg",
         sizes: "any",
         type: "image/svg+xml",
         purpose: "any",
       },
       {
-        src: "/icons/icon-maskable.svg",
+        src: "/icons/logo.svg",
         sizes: "any",
         type: "image/svg+xml",
         purpose: "maskable",
+      },
+      {
+        src: "/icons/logo.svg",
+        sizes: "any",
+        type: "image/svg+xml",
+        purpose: "monochrome",
       },
     ],
   };

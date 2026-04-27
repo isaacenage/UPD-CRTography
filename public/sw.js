@@ -10,7 +10,7 @@
 // Bump CACHE_VERSION on every deploy that changes shell/data behavior so
 // old caches are evicted on activate.
 
-const CACHE_VERSION = "hb-v1";
+const CACHE_VERSION = "hb-v2";
 const SHELL_CACHE = `hb-shell-${CACHE_VERSION}`;
 const DATA_CACHE = `hb-data-${CACHE_VERSION}`;
 const TILE_CACHE = `hb-tiles-${CACHE_VERSION}`;
@@ -19,8 +19,7 @@ const NEXT_CACHE = `hb-next-${CACHE_VERSION}`;
 const SHELL_PRECACHE = [
   "/",
   "/manifest.webmanifest",
-  "/icons/icon.svg",
-  "/icons/icon-maskable.svg",
+  "/icons/logo.svg",
 ];
 
 const TILE_HOSTS = ["tiles.openfreemap.org"];
