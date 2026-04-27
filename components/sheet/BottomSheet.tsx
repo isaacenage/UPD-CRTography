@@ -8,6 +8,7 @@ import {
   useRef,
   useState,
   type CSSProperties,
+  type KeyboardEvent as ReactKeyboardEvent,
   type PointerEvent as ReactPointerEvent,
   type ReactNode,
 } from "react";
@@ -32,6 +33,14 @@ type Props = {
 const HALF_RATIO = 0.55;
 const FULL_RATIO = 0.92;
 const SWIPE_DISMISS_THRESHOLD = 80; // pixels past peek required to close
+const TAP_DISTANCE_THRESHOLD = 6; // px movement below which a pointer is a tap, not a drag
+const TAP_TIME_THRESHOLD = 350; // ms hold below which a pointer is a tap
+
+function nextSnapInCycle(current: SheetSnap): SheetSnap {
+  if (current === "peek") return "half";
+  if (current === "half") return "full";
+  return "peek";
+}
 
 function snapHeight(snap: SheetSnap, viewport: number, peek: number): number {
   if (snap === "peek") return peek;
@@ -86,9 +95,11 @@ export default function BottomSheet({
   const dragStateRef = useRef<{
     startY: number;
     startHeight: number;
+    startT: number;
     lastY: number;
     lastT: number;
     velocity: number;
+    dragged: boolean;
   } | null>(null);
   const [viewport, setViewport] = useState<number>(0);
   const [dragHeight, setDragHeight] = useState<number | null>(null);
@@ -121,12 +132,15 @@ export default function BottomSheet({
       // the sheet body must own its own scroll at full snap.
       if (!(e.currentTarget as HTMLElement).dataset.dragHandle) return;
       e.currentTarget.setPointerCapture(e.pointerId);
+      const now = performance.now();
       dragStateRef.current = {
         startY: e.clientY,
         startHeight: currentHeight,
+        startT: now,
         lastY: e.clientY,
-        lastT: performance.now(),
+        lastT: now,
         velocity: 0,
+        dragged: false,
       };
     },
     [currentHeight],
@@ -137,6 +151,9 @@ export default function BottomSheet({
       const state = dragStateRef.current;
       if (!state) return;
       const dy = e.clientY - state.startY;
+      // Suppress micro-jitter so a tap doesn't get reclassified as a drag.
+      if (!state.dragged && Math.abs(dy) < TAP_DISTANCE_THRESHOLD) return;
+      state.dragged = true;
       const next = Math.max(40, Math.min((viewport || 800) * 0.96, state.startHeight - dy));
       setDragHeight(next);
       const now = performance.now();
@@ -155,6 +172,13 @@ export default function BottomSheet({
     const finalHeight = dragHeight ?? targetHeight;
     setDragHeight(null);
 
+    // Tap (no meaningful drag) → cycle through snap points so users
+    // who can't get the gesture right can still expand/collapse.
+    if (!state.dragged && performance.now() - state.startT < TAP_TIME_THRESHOLD) {
+      onSnapChange(nextSnapInCycle(snap));
+      return;
+    }
+
     // Past peek by enough → dismiss (clears selection if onDismiss provided)
     if (
       onDismiss &&
@@ -167,7 +191,7 @@ export default function BottomSheet({
 
     const next = nearestSnap(finalHeight, state.velocity, viewport || 800, peekHeight);
     onSnapChange(next);
-  }, [dragHeight, targetHeight, viewport, peekHeight, onDismiss, onSnapChange]);
+  }, [dragHeight, targetHeight, viewport, peekHeight, onDismiss, onSnapChange, snap]);
 
   const onPointerUp = useCallback(
     (e: ReactPointerEvent<HTMLDivElement>) => {
@@ -183,6 +207,16 @@ export default function BottomSheet({
     dragStateRef.current = null;
     setDragHeight(null);
   }, []);
+
+  const onHandleKeyDown = useCallback(
+    (e: ReactKeyboardEvent<HTMLDivElement>) => {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        onSnapChange(nextSnapInCycle(snap));
+      }
+    },
+    [snap, onSnapChange],
+  );
 
   // Esc closes from full snap → half (Phase 6 a11y trap also handles this).
   useEffect(() => {
@@ -232,14 +266,21 @@ export default function BottomSheet({
         aria-label="Building details panel"
       >
         {/* Drag handle area: pointer events here own the gesture; the body
-            below uses overscroll-behavior: contain to scroll independently. */}
+            below uses overscroll-behavior: contain to scroll independently.
+            Tap (no drag) cycles snap points so the sheet is reachable
+            without a precise gesture. */}
         <div
           data-drag-handle="true"
+          role="button"
+          tabIndex={0}
+          aria-label={`Sheet is ${snap}. Tap to ${nextSnapInCycle(snap)}, or drag to resize.`}
+          aria-expanded={snap !== "peek"}
           onPointerDown={onPointerDown}
           onPointerMove={onPointerMove}
           onPointerUp={onPointerUp}
           onPointerCancel={onPointerCancel}
-          className="cursor-grab active:cursor-grabbing select-none"
+          onKeyDown={onHandleKeyDown}
+          className="cursor-pointer active:cursor-grabbing select-none py-3 -mt-1"
           style={{ touchAction: "none" }}
         >
           <SheetHandle />
