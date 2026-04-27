@@ -446,22 +446,31 @@ export default function Map({ filters, selectedId, onSelect }: Props) {
 
     overlayReadyRef.current = false;
 
-    const onStyle = () => {
-      // styledata fires repeatedly while tiles load; the moment the new
-      // style reports loaded we re-attach our overlays + filter.
+    // setStyle with diff:false is a full style replacement — every source
+    // and layer (including ours) is wiped. We poll 'styledata' instead of
+    // listening once: 'styledata' can fire mid-transition (e.g., from old
+    // style teardown) before the new Style is ready, and isStyleLoaded()
+    // is the only reliable signal that addSource/addLayer will stick.
+    // Layer-keyed click delegations live on the Map (not the Style) and
+    // check getLayer(id) at click time, so they re-bind automatically once
+    // the new FILL_LAYER is added.
+    const tryReAdd = () => {
       if (!map.isStyleLoaded()) return;
-      map.off("styledata", onStyle);
+      map.off("styledata", tryReAdd);
+      map.off("idle", tryReAdd);
       reAddOverlaysRef.current?.();
       applyFilterRef.current?.();
-      // Re-apply selection feature-state so the active building stays lit.
       const sel = lastSelectedIdRef.current;
       if (sel !== null && map.getSource(SOURCE_ID)) {
         map.setFeatureState({ source: SOURCE_ID, id: sel }, { selected: true });
       }
       overlayReadyRef.current = true;
     };
-    map.on("styledata", onStyle);
-    map.setStyle(basemapUrlFor(theme));
+    map.on("styledata", tryReAdd);
+    // Belt-and-braces: idle is guaranteed to fire once the new style is
+    // settled, even if no styledata event surfaces an isStyleLoaded()=true.
+    map.on("idle", tryReAdd);
+    map.setStyle(basemapUrlFor(theme), { diff: false });
   }, [theme]);
 
   // Click → set selection (sheet renders detail; Map flies to feature).
