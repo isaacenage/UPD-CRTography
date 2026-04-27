@@ -146,7 +146,7 @@ function rawToResult(raw: RouteRaw): RouteResult | null {
     distanceLabel: formatDistance(distance),
     durationLabel: formatDuration(duration),
     steps,
-    profile: "driving",
+    profile: "walking",
     fallback: false,
   };
 }
@@ -181,23 +181,19 @@ export async function createDirections(map: MapLibreMap): Promise<DirectionsServ
     const apiBase = process.env.NEXT_PUBLIC_OSRM_URL || DEFAULT_OSRM;
     plugin = new Ctor(map, {
       api: apiBase,
-      // Driving profile so OSM road rules (oneways, turn restrictions,
-      // illegal U-turns) are enforced. Walking ignored all of these.
-      profile: "driving",
+      // Walking profile so the route follows pedestrian-accessible paths.
+      // On UP Diliman the Academic Oval (Roxas Ave) is one-way for vehicles
+      // but freely walkable; the driving profile forced detours around it,
+      // which is wrong for a foot-traffic app.
+      profile: "walking",
       requestOptions: {
         overview: "full",
         steps: "true",
         geometries: "geojson",
-        // Ask for alternatives so we can post-pick the shortest by distance
-        // (OSRM's driving profile minimizes time by default; this gives us
-        // an honest "shortest legal" route).
+        // Ask for alternatives so we can post-pick the shortest by distance.
+        // OSRM's walking profile minimizes time, which usually matches
+        // shortest, but alternatives + post-sort is a free safety net.
         alternatives: "true",
-        // Forbid an immediate U-turn at the origin — the most common
-        // illegal-route artifact when starting on a divided road.
-        continue_straight: "true",
-        // Route to the curb side of the destination, which respects the
-        // travel direction on multi-lane roads.
-        approaches: "curb;curb",
       },
     } as unknown as ConstructorParameters<typeof Ctor>[1]) as unknown as PluginInstance;
 

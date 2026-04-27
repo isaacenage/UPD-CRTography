@@ -29,11 +29,13 @@ const COLOR_PAPER = COLOR.paper;
 const COLOR_MAROON_500 = COLOR.maroon500;
 const COLOR_FOREST_500 = COLOR.forest500;
 
-// OpenFreeMap publishes both Positron (light) and Dark Matter — same vector
-// tile schema, different styling — so we can swap the URL on theme change
-// without touching our overlay layers.
+// OpenFreeMap exposes Positron (light) and a dark-themed sibling at
+// /styles/dark — same vector tile schema, different styling — so we can
+// swap the URL on theme change without touching our overlay layers.
+// (Note: the upstream OSM-tiles project's "dark-matter" id does NOT exist
+// on OpenFreeMap; using it 404s and leaves the canvas empty.)
 const BASEMAP_LIGHT = "https://tiles.openfreemap.org/styles/positron";
-const BASEMAP_DARK = "https://tiles.openfreemap.org/styles/dark-matter";
+const BASEMAP_DARK = "https://tiles.openfreemap.org/styles/dark";
 
 function basemapUrlFor(theme: Theme): string {
   return theme === "dark" ? BASEMAP_DARK : BASEMAP_LIGHT;
