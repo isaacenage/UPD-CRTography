@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-label="Hanap-Bidet">
+  <rect width="512" height="512" fill="#7B1113"/>
+  <g fill="#F7F4EE" font-family="ui-sans-serif,system-ui,-apple-system,'Segoe UI',sans-serif" text-anchor="middle">
+    <text x="256" y="296" font-size="220" font-weight="700" letter-spacing="-8">HB</text>
+    <text x="256" y="380" font-size="42" font-weight="500" letter-spacing="10">UPD</text>
+  </g>
+</svg>

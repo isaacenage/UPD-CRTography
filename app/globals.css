@@ -1,0 +1,199 @@
+@import "tailwindcss";
+@import "maplibre-gl/dist/maplibre-gl.css";
+
+@theme {
+  /* Foundation */
+  --color-ink: #1A1A1A;
+  --color-paper: #F7F4EE;
+
+  /* Maroon (Primary) */
+  --color-maroon-50: #FBEDED;
+  --color-maroon-100: #F5D2D3;
+  --color-maroon-200: #E8A5A7;
+  --color-maroon-300: #D8787B;
+  --color-maroon-400: #B83A3D;
+  --color-maroon-500: #7B1113;
+  --color-maroon-600: #6B0E10;
+  --color-maroon-700: #5A0B0D;
+  --color-maroon-800: #48080A;
+  --color-maroon-900: #2E0506;
+
+  /* Forest Green (Action) */
+  --color-forest-50: #E6F0EA;
+  --color-forest-100: #C2DCCD;
+  --color-forest-200: #8FC0A6;
+  --color-forest-300: #5BA37E;
+  --color-forest-400: #2F8557;
+  --color-forest-500: #014421;
+  --color-forest-600: #013A1C;
+  --color-forest-700: #012F17;
+  --color-forest-800: #002311;
+  --color-forest-900: #00170B;
+
+  /* Gold (Achievement) */
+  --color-gold-300: #F5D78A;
+  --color-gold-500: #D4A547;
+  --color-gold-600: #B8861F;
+
+  /* Track Orange (Energy) */
+  --color-track-300: #FFB088;
+  --color-track-500: #F47E3F;
+  --color-track-600: #D8621F;
+
+  /* Cool neutral grays */
+  --color-gray-50: #F5F5F4;
+  --color-gray-100: #EAEAE8;
+  --color-gray-200: #D6D5D2;
+  --color-gray-300: #B8B7B3;
+  --color-gray-400: #8A8986;
+  --color-gray-500: #66655F;
+  --color-gray-600: #4D4C47;
+  --color-gray-700: #3A3935;
+  --color-gray-800: #262522;
+  --color-gray-900: #14130F;
+
+  /* Typography */
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "Cascadia Mono", "Consolas", monospace;
+}
+
+:root {
+  /* Safe-area insets — paired with viewportFit: "cover" in app/layout.tsx.
+     Without that meta the env() values silently return 0 on iPhone. */
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
+
+  /* Visual viewport height — overwritten from JS when on-screen keyboard
+     reduces available space. Falls back to dvh. */
+  --vvh: 100dvh;
+
+  /* Shell metrics shared across components so a FAB can sit above the sheet
+     without prop-drilling. Sheet redefines --sheet-peek when mounted. */
+  --sheet-peek: 120px;
+}
+
+html, body {
+  background: var(--color-paper);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  /* Layered height: 100% for legacy WebKit (FB/IG webviews), 100dvh for
+     modern Safari/Chrome that respect the dynamic viewport. Never use
+     100vh — it stays at the maximum even when the URL bar expands. */
+  height: 100%;
+  height: 100dvh;
+}
+
+body {
+  overscroll-behavior: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+#__next, body > main {
+  width: 100%;
+  height: 100%;
+}
+
+.maplibregl-map {
+  font-family: var(--font-sans);
+}
+
+/* Map UI chrome: any wrapper with this class enforces 44px tap targets and
+   kills iOS double-tap zoom + long-press text selection on its buttons. */
+.map-ui-chrome {
+  touch-action: manipulation;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.map-ui-chrome button {
+  min-width: 44px;
+  min-height: 44px;
+}
+
+/* Hide scrollbars while preserving scroll behavior — used by the chip row. */
+.scrollbar-none {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+
+/* MapLibre popup -> brand surface (legacy: kept for any future popup use,
+   though Phase 2 removes the building popup in favor of the bottom sheet). */
+.maplibregl-popup-content {
+  background: var(--color-paper);
+  color: var(--color-ink);
+  border: 1px solid var(--color-gray-200);
+  border-radius: 2px;
+  padding: 0;
+  box-shadow: 0 6px 24px -8px rgb(26 26 26 / 0.18);
+  font-family: var(--font-sans);
+}
+
+.maplibregl-popup-tip {
+  border-top-color: var(--color-paper) !important;
+  border-bottom-color: var(--color-paper) !important;
+}
+
+.maplibregl-popup-close-button {
+  color: var(--color-gray-500);
+  font-size: 18px;
+  padding: 4px 8px;
+}
+
+.maplibregl-popup-close-button:hover {
+  background: transparent;
+  color: var(--color-maroon-500);
+}
+
+.maplibregl-ctrl-group {
+  background: var(--color-paper);
+  border: 1px solid var(--color-gray-200);
+  border-radius: 2px;
+  box-shadow: none;
+}
+
+.maplibregl-ctrl-group button {
+  background: var(--color-paper);
+}
+
+.maplibregl-ctrl-group button:hover {
+  background: var(--color-maroon-50);
+}
+
+.maplibregl-ctrl-attrib {
+  background: rgb(247 244 238 / 0.8);
+  color: var(--color-gray-600);
+  font-family: var(--font-mono);
+  font-size: 10px;
+}
+
+.maplibregl-ctrl-attrib a {
+  color: var(--color-maroon-500);
+}
+
+/* Hide MapLibre's default GeolocateControl button — Phase 4's branded
+   LocateFab triggers the same control programmatically. */
+.maplibregl-ctrl-geolocate {
+  display: none !important;
+}
+
+/* prefers-reduced-motion: kill all animations + transitions globally. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
