@@ -14,7 +14,7 @@ export default function EmptyState({ totalCount, bidetCount, publicCount }: Prop
 
   return (
     <div className="pt-1">
-      <div className="font-mono text-[10px] tracking-widest uppercase text-maroon-600 font-medium">
+      <div className="font-mono text-[10px] tracking-widest uppercase text-maroon-600 dark:text-maroon-300 font-medium">
         UP Diliman &middot; Comfort Room Atlas
       </div>
       <h2 className="mt-1 text-lg font-bold tracking-tight text-ink leading-tight">
@@ -34,7 +34,7 @@ export default function EmptyState({ totalCount, bidetCount, publicCount }: Prop
       <button
         type="button"
         onClick={() => setAboutOpen((o) => !o)}
-        className="mt-3 text-xs font-mono tracking-widest uppercase text-maroon-600 underline underline-offset-2 hover:text-maroon-700"
+        className="mt-3 text-xs font-mono tracking-widest uppercase text-maroon-600 dark:text-maroon-300 underline underline-offset-2 hover:text-maroon-700 dark:hover:text-maroon-200"
         aria-expanded={aboutOpen}
       >
         {aboutOpen ? "Hide about" : "About this map"}
@@ -55,7 +55,7 @@ export default function EmptyState({ totalCount, bidetCount, publicCount }: Prop
               href="https://www.facebook.com/share/p/1HwxPg9ETt/"
               target="_blank"
               rel="noopener noreferrer"
-              className="text-maroon-500 hover:text-maroon-600 underline underline-offset-2"
+              className="text-maroon-500 dark:text-maroon-300 hover:text-maroon-600 dark:hover:text-maroon-200 underline underline-offset-2"
             >
               Philippine Collegian
             </a>
@@ -78,9 +78,9 @@ function Stat({
 }) {
   const accentClass =
     accent === "forest"
-      ? "text-forest-500"
+      ? "text-forest-500 dark:text-forest-300"
       : accent === "gold"
-        ? "text-gold-600"
+        ? "text-gold-600 dark:text-gold-300"
         : "text-ink";
   return (
     <li className="rounded-sm border border-gray-200 bg-paper px-3 py-2">

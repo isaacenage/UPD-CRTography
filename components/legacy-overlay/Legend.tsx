@@ -7,7 +7,7 @@ export default function Legend() {
       <ul className="space-y-1.5">
         <li className="flex items-center gap-2.5 text-xs text-ink">
           <span
-            className="inline-grid place-items-center w-4 h-4 rounded-sm border border-ink/40 text-paper text-[10px] font-bold"
+            className="inline-grid place-items-center w-4 h-4 rounded-sm border border-ink/40 text-white text-[10px] font-bold"
             style={{ background: "#014421" }}
             aria-hidden
           >
@@ -17,7 +17,7 @@ export default function Legend() {
         </li>
         <li className="flex items-center gap-2.5 text-xs text-ink">
           <span
-            className="inline-grid place-items-center w-4 h-4 rounded-sm border border-ink/40 text-paper text-[10px] font-bold"
+            className="inline-grid place-items-center w-4 h-4 rounded-sm border border-ink/40 text-white text-[10px] font-bold"
             style={{ background: "#7B1113" }}
             aria-hidden
           >

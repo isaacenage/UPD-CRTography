@@ -255,7 +255,7 @@ export default function BottomSheet({
           type="button"
           aria-label="Collapse details panel"
           onClick={() => onSnapChange("half")}
-          className="fixed inset-0 z-20 bg-ink/35 backdrop-blur-[1px] cursor-pointer"
+          className="fixed inset-0 z-20 bg-ink/35 dark:bg-black/55 backdrop-blur-[1px] cursor-pointer"
         />
       ) : null}
       <aside

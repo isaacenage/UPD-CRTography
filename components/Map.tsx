@@ -17,6 +17,7 @@ import { toMaplibreFilter, applies, type Filters } from "@/lib/filters";
 import type { DirectionsService } from "@/lib/directions";
 import { log } from "@/lib/log";
 import { COLOR } from "@/lib/theme";
+import { useTheme, type Theme } from "@/lib/theme/context";
 
 const SOURCE_ID = "up-buildings";
 const FILL_LAYER = "up-buildings-fill";
@@ -28,7 +29,15 @@ const COLOR_PAPER = COLOR.paper;
 const COLOR_MAROON_500 = COLOR.maroon500;
 const COLOR_FOREST_500 = COLOR.forest500;
 
-const BASEMAP_STYLE_URL = "https://tiles.openfreemap.org/styles/positron";
+// OpenFreeMap publishes both Positron (light) and Dark Matter — same vector
+// tile schema, different styling — so we can swap the URL on theme change
+// without touching our overlay layers.
+const BASEMAP_LIGHT = "https://tiles.openfreemap.org/styles/positron";
+const BASEMAP_DARK = "https://tiles.openfreemap.org/styles/dark-matter";
+
+function basemapUrlFor(theme: Theme): string {
+  return theme === "dark" ? BASEMAP_DARK : BASEMAP_LIGHT;
+}
 
 export type Selection = Readonly<{
   building: BuildingProps;
@@ -49,10 +58,17 @@ function prefersReducedMotion(): boolean {
 }
 
 export default function Map({ filters, selectedId, onSelect }: Props) {
+  const { theme } = useTheme();
+  const themeRef = useRef<Theme>(theme);
+
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
   const overlayReadyRef = useRef(false);
   const applyFilterRef = useRef<(() => void) | null>(null);
+  const reAddOverlaysRef = useRef<(() => void) | null>(null);
+  const directionsServiceRef = useRef<DirectionsService | null>(null);
+  const directionsLoadingRef = useRef(false);
+  const routeAbortRef = useRef<AbortController | null>(null);
   const geolocateRef = useRef<maplibregl.GeolocateControl | null>(null);
   const lastSelectedIdRef = useRef<number | null>(null);
   // Use globalThis.Map explicitly — `Map` in this file is the React
@@ -61,6 +77,7 @@ export default function Map({ filters, selectedId, onSelect }: Props) {
   const featuresByIdRef = useRef<globalThis.Map<number, GeoJSON.Feature>>(
     new globalThis.Map(),
   );
+  const datasetRef = useRef<GeoJSON.FeatureCollection | null>(null);
   const buildingsBboxRef = useRef<readonly [readonly [number, number], readonly [number, number]] | null>(null);
   const onSelectRef = useRef(onSelect);
 
@@ -74,7 +91,7 @@ export default function Map({ filters, selectedId, onSelect }: Props) {
 
     const map = new maplibregl.Map({
       container: containerRef.current,
-      style: BASEMAP_STYLE_URL,
+      style: basemapUrlFor(themeRef.current),
       center: [121.0685, 14.6537],
       zoom: 15.5,
       minZoom: 14,
@@ -143,26 +160,28 @@ export default function Map({ filters, selectedId, onSelect }: Props) {
 
     // Lazy directions service — created on first requestRoute event so
     // the directions plugin (and OSRM-derived parsing code) is excluded
-    // from the initial bundle on map load.
-    let directionsService: DirectionsService | null = null;
-    let routeAbortController: AbortController | null = null;
-    let directionsLoading = false;
-
+    // from the initial bundle on map load. Lifted to refs so the
+    // theme-change effect can tear it down (its plugin layers don't
+    // survive a setStyle).
     const offRequestRoute = mapBus.on("requestRoute", async ({ requestId, from, to }) => {
       try {
-        if (!directionsService && !directionsLoading) {
-          directionsLoading = true;
+        if (!directionsServiceRef.current && !directionsLoadingRef.current) {
+          directionsLoadingRef.current = true;
           const { createDirections } = await import("@/lib/directions");
-          directionsService = await createDirections(map);
-          directionsLoading = false;
+          directionsServiceRef.current = await createDirections(map);
+          directionsLoadingRef.current = false;
         }
-        if (!directionsService) {
+        if (!directionsServiceRef.current) {
           mapBus.dispatch("routeError", { requestId, message: "Directions unavailable" });
           return;
         }
-        routeAbortController?.abort();
-        routeAbortController = new AbortController();
-        const route = await directionsService.requestRoute(from, to, routeAbortController.signal);
+        routeAbortRef.current?.abort();
+        routeAbortRef.current = new AbortController();
+        const route = await directionsServiceRef.current.requestRoute(
+          from,
+          to,
+          routeAbortRef.current.signal,
+        );
         mapBus.dispatch("routeReady", { requestId, route });
       } catch (err) {
         if ((err as DOMException)?.name === "AbortError") return;
@@ -172,9 +191,9 @@ export default function Map({ filters, selectedId, onSelect }: Props) {
     });
 
     const offClearRoute = mapBus.on("clearRoute", () => {
-      routeAbortController?.abort();
-      routeAbortController = null;
-      directionsService?.clear();
+      routeAbortRef.current?.abort();
+      routeAbortRef.current = null;
+      directionsServiceRef.current?.clear();
     });
 
     // Follow mode: while active, pan camera to each user-location fix.
@@ -226,33 +245,19 @@ export default function Map({ filters, selectedId, onSelect }: Props) {
       onSelectRef.current({ building: props, centroid: center });
     }
 
-    map.on("load", async () => {
-      try {
-        const res = await fetch("/data/up-buildings.geojson");
-        if (!res.ok) throw new Error(`geojson fetch ${res.status}`);
-        const data = (await res.json()) as GeoJSON.FeatureCollection;
-
-        if (Array.isArray(data?.features)) {
-          for (let i = 0; i < data.features.length; i++) {
-            if (data.features[i].id === undefined) {
-              data.features[i].id = i;
-            }
-          }
-        }
-
-        // Index for flyToFeature + selection lookup.
-        const index = new globalThis.Map<number, GeoJSON.Feature>();
-        for (const f of data.features) {
-          if (typeof f.id === "number") index.set(f.id, f);
-        }
-        featuresByIdRef.current = index;
-
+    // Adds (or re-adds) our overlay source + layers on top of whatever
+    // basemap style is currently loaded. Idempotent; safe to call after a
+    // map.setStyle() once `styledata` has fired.
+    function addOverlays(data: GeoJSON.FeatureCollection) {
+      if (!map.getSource(SOURCE_ID)) {
         map.addSource(SOURCE_ID, {
           type: "geojson",
           data,
           promoteId: undefined,
         });
+      }
 
+      if (!map.getLayer(FILL_LAYER)) {
         map.addLayer({
           id: FILL_LAYER,
           type: "fill",
@@ -277,18 +282,17 @@ export default function Map({ filters, selectedId, onSelect }: Props) {
             ],
           },
         });
+      }
 
+      if (!map.getLayer(LINE_LAYER)) {
         map.addLayer({
           id: LINE_LAYER,
           type: "line",
           source: SOURCE_ID,
           paint: {
-            "line-color": [
-              "case",
-              ["boolean", ["feature-state", "selected"], false],
-              COLOR_INK,
-              COLOR_INK,
-            ],
+            // Outline color flips with the theme so building edges stay
+            // legible on the dark basemap.
+            "line-color": themeRef.current === "dark" ? COLOR_PAPER : COLOR_INK,
             "line-width": [
               "case",
               ["boolean", ["feature-state", "selected"], false],
@@ -303,7 +307,9 @@ export default function Map({ filters, selectedId, onSelect }: Props) {
             ],
           },
         });
+      }
 
+      if (!map.getLayer(LABEL_LAYER)) {
         map.addLayer({
           id: LABEL_LAYER,
           type: "symbol",
@@ -335,6 +341,38 @@ export default function Map({ filters, selectedId, onSelect }: Props) {
             "text-halo-blur": 0.4,
           },
         });
+      }
+    }
+
+    // Stash so the theme-change effect can rehydrate overlays after
+    // setStyle without re-fetching the GeoJSON.
+    reAddOverlaysRef.current = () => {
+      if (datasetRef.current) addOverlays(datasetRef.current);
+    };
+
+    map.on("load", async () => {
+      try {
+        const res = await fetch("/data/up-buildings.geojson");
+        if (!res.ok) throw new Error(`geojson fetch ${res.status}`);
+        const data = (await res.json()) as GeoJSON.FeatureCollection;
+
+        if (Array.isArray(data?.features)) {
+          for (let i = 0; i < data.features.length; i++) {
+            if (data.features[i].id === undefined) {
+              data.features[i].id = i;
+            }
+          }
+        }
+
+        // Index for flyToFeature + selection lookup.
+        const index = new globalThis.Map<number, GeoJSON.Feature>();
+        for (const f of data.features) {
+          if (typeof f.id === "number") index.set(f.id, f);
+        }
+        featuresByIdRef.current = index;
+        datasetRef.current = data;
+
+        addOverlays(data);
 
         // Frame the building extent on first load + remember the bbox
         // so the Home FAB can re-fit on demand.
@@ -366,17 +404,63 @@ export default function Map({ filters, selectedId, onSelect }: Props) {
       offFollowMode();
       followOff?.();
       followOff = null;
-      routeAbortController?.abort();
-      directionsService?.destroy();
-      directionsService = null;
+      routeAbortRef.current?.abort();
+      routeAbortRef.current = null;
+      directionsServiceRef.current?.destroy();
+      directionsServiceRef.current = null;
       overlayReadyRef.current = false;
       geolocateRef.current = null;
       featuresByIdRef.current.clear();
+      datasetRef.current = null;
+      reAddOverlaysRef.current = null;
       map.remove();
       mapRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Swap the basemap when the theme changes. setStyle wipes everything we
+  // added (buildings + directions plugin layers), so we tear down the
+  // directions service (next route request rebuilds it) and re-add the
+  // building overlay layers once the new style finishes parsing.
+  useEffect(() => {
+    if (themeRef.current === theme) return;
+    const map = mapRef.current;
+    if (!map) {
+      themeRef.current = theme;
+      return;
+    }
+    themeRef.current = theme;
+
+    routeAbortRef.current?.abort();
+    routeAbortRef.current = null;
+    try {
+      directionsServiceRef.current?.destroy();
+    } catch {
+      // noop
+    }
+    directionsServiceRef.current = null;
+    mapBus.dispatch("clearRoute", undefined);
+
+    overlayReadyRef.current = false;
+
+    const onStyle = () => {
+      // styledata fires repeatedly while tiles load; the moment the new
+      // style reports loaded we re-attach our overlays + filter.
+      if (!map.isStyleLoaded()) return;
+      map.off("styledata", onStyle);
+      reAddOverlaysRef.current?.();
+      applyFilterRef.current?.();
+      // Re-apply selection feature-state so the active building stays lit.
+      const sel = lastSelectedIdRef.current;
+      if (sel !== null && map.getSource(SOURCE_ID)) {
+        map.setFeatureState({ source: SOURCE_ID, id: sel }, { selected: true });
+      }
+      overlayReadyRef.current = true;
+    };
+    map.on("styledata", onStyle);
+    map.setStyle(basemapUrlFor(theme));
+  }, [theme]);
 
   // Click → set selection (sheet renders detail; Map flies to feature).
   useEffect(() => {

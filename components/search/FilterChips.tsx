@@ -65,7 +65,7 @@ export default function FilterChips({ filters, onChange }: Props) {
             "font-mono text-[10px] tracking-widest uppercase font-medium",
             "transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2",
             chip.active
-              ? "bg-forest-500 text-paper border-forest-600 hover:bg-forest-600 focus:ring-forest-500"
+              ? "bg-forest-500 text-white border-forest-600 hover:bg-forest-600 focus:ring-forest-500"
               : "bg-paper text-ink border-gray-200 hover:border-maroon-300 hover:bg-maroon-50 focus:ring-maroon-500",
           ].join(" ")}
         >

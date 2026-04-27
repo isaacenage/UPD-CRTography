@@ -11,7 +11,7 @@ export default function LocateFab() {
       type="button"
       onClick={() => mapBus.dispatch("locate", undefined)}
       aria-label="Show my location on the map"
-      className="absolute z-20 right-3 grid place-items-center w-14 h-14 rounded-full bg-paper border border-gray-200 text-maroon-600 shadow-[0_10px_28px_-12px_rgb(26_26_26_/_0.35)] hover:bg-maroon-50 hover:border-maroon-300 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-maroon-500 transition-colors"
+      className="absolute z-20 right-3 grid place-items-center w-14 h-14 rounded-full bg-paper border border-gray-200 text-maroon-600 dark:text-maroon-300 shadow-[0_10px_28px_-12px_rgb(26_26_26_/_0.35)] hover:bg-maroon-50 hover:border-maroon-300 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-maroon-500 transition-colors"
       style={{
         bottom: "calc(var(--safe-bottom) + var(--sheet-peek, 120px) + 12px)",
         right: "max(var(--safe-right), 0.75rem)",

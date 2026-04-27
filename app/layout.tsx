@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Inter, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import SwRegister from "@/components/SwRegister";
+import { ThemeProvider, NO_FOUC_SCRIPT } from "@/lib/theme/context";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -53,10 +54,22 @@ export default function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="en" className={`${inter.variable} ${jetbrainsMono.variable}`}>
+    <html
+      lang="en"
+      className={`${inter.variable} ${jetbrainsMono.variable}`}
+      suppressHydrationWarning
+    >
+      <head>
+        {/* Sets `.dark` on <html> before paint so a dark-preferred reload
+            never flashes the light surface. Must run before React hydrates;
+            inlined as a tiny IIFE for that reason. */}
+        <script dangerouslySetInnerHTML={{ __html: NO_FOUC_SCRIPT }} />
+      </head>
       <body className="bg-paper text-ink antialiased min-h-[100svh] overscroll-none">
-        {children}
-        <SwRegister />
+        <ThemeProvider>
+          {children}
+          <SwRegister />
+        </ThemeProvider>
       </body>
     </html>
   );

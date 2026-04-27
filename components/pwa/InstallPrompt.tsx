@@ -59,12 +59,12 @@ export default function InstallPrompt() {
       <div className="flex items-start gap-3">
         <div
           aria-hidden
-          className="shrink-0 grid place-items-center w-8 h-8 rounded-sm bg-maroon-500 text-paper text-[11px] font-bold"
+          className="shrink-0 grid place-items-center w-8 h-8 rounded-sm bg-maroon-500 text-white text-[11px] font-bold"
         >
           HB
         </div>
         <div className="flex-1 min-w-0">
-          <p className="font-mono text-[10px] tracking-widest uppercase text-maroon-700 font-medium">
+          <p className="font-mono text-[10px] tracking-widest uppercase text-maroon-700 dark:text-maroon-300 font-medium">
             Install on your phone
           </p>
           <p className="mt-1 text-xs text-gray-700 leading-relaxed">
@@ -97,7 +97,7 @@ export default function InstallPrompt() {
                     setHidden(true);
                   }
                 }}
-                className="rounded-sm bg-maroon-500 hover:bg-maroon-600 text-paper px-3 py-1.5 text-[10px] font-mono tracking-widest uppercase min-h-[36px]"
+                className="rounded-sm bg-maroon-500 hover:bg-maroon-600 text-white px-3 py-1.5 text-[10px] font-mono tracking-widest uppercase min-h-[36px]"
               >
                 Install
               </button>

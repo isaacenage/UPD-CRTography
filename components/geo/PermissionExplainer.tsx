@@ -40,11 +40,11 @@ export default function PermissionExplainer({ open, onAccept, onDecline }: Props
       role="dialog"
       aria-modal="true"
       aria-labelledby="loc-explain-title"
-      className="fixed inset-0 z-[60] grid place-items-end sm:place-items-center bg-ink/40 backdrop-blur-[1px] px-4"
+      className="fixed inset-0 z-[60] grid place-items-end sm:place-items-center bg-ink/40 dark:bg-black/60 backdrop-blur-[1px] px-4"
       style={{ paddingBottom: "max(var(--safe-bottom), 1rem)" }}
     >
       <div className="w-full max-w-sm bg-paper border border-gray-200 rounded-sm shadow-[0_18px_40px_-12px_rgb(26_26_26_/_0.45)] overflow-hidden">
-        <div className="bg-forest-500 text-paper px-5 py-3">
+        <div className="bg-forest-500 text-white px-5 py-3">
           <div className="font-mono text-[9px] tracking-[0.2em] uppercase opacity-85 font-medium">
             Permission &middot; Location
           </div>
@@ -73,7 +73,7 @@ export default function PermissionExplainer({ open, onAccept, onDecline }: Props
           <button
             type="button"
             onClick={() => dismiss(true)}
-            className="flex-1 rounded-sm bg-forest-500 hover:bg-forest-600 text-paper py-2.5 text-xs font-mono tracking-widest uppercase min-h-[44px]"
+            className="flex-1 rounded-sm bg-forest-500 hover:bg-forest-600 text-white py-2.5 text-xs font-mono tracking-widest uppercase min-h-[44px]"
           >
             Continue
           </button>

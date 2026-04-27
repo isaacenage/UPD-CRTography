@@ -1,6 +1,11 @@
 @import "tailwindcss";
 @import "maplibre-gl/dist/maplibre-gl.css";
 
+/* Tailwind v4 dark variant — class-based so we can persist a preference
+   that survives a system-pref change. ThemeProvider toggles `.dark` on
+   <html>; every `dark:` utility resolves through this rule. */
+@custom-variant dark (&:where(.dark, .dark *));
+
 @theme {
   /* Foundation */
   --color-ink: #1A1A1A;
@@ -72,6 +77,39 @@
   /* Shell metrics shared across components so a FAB can sit above the sheet
      without prop-drilling. Sheet redefines --sheet-peek when mounted. */
   --sheet-peek: 120px;
+}
+
+/* Dark mode token overrides. The Tailwind @theme tokens are exposed as CSS
+   vars; redefining them under .dark cascades to every existing utility
+   (`bg-paper`, `text-ink`, `border-gray-200`, `text-gray-600`, etc.) without
+   touching component class lists. The palette is dark-maroon — surfaces are
+   tinted with deep maroon, text is warm cream, the brand maroon/forest/gold
+   accents are kept unchanged so highlights still feel on-brand. */
+.dark {
+  /* Foundation */
+  --color-ink: #F5E6E8;
+  --color-paper: #1F0A10;
+
+  /* Maroon-tinted "gray" scale — inverted lightness so utilities flip
+     correctly: gray-50/100/200 become deep surfaces, gray-700/800/900
+     become bright text. */
+  --color-gray-50: #2A1014;
+  --color-gray-100: #321218;
+  --color-gray-200: #3D161E;
+  --color-gray-300: #4D1F28;
+  --color-gray-400: #80606A;
+  --color-gray-500: #A88A92;
+  --color-gray-600: #C4ACB2;
+  --color-gray-700: #DAC8CC;
+  --color-gray-800: #ECDFE2;
+  --color-gray-900: #F5EBED;
+
+  /* Brand maroon stays — it's the accent the dark theme is built around.
+     The 50/100 ramps are recolored so subtle hover/tinted backgrounds
+     read on the dark maroon paper instead of looking washed out. */
+  --color-maroon-50: #3A141C;
+  --color-maroon-100: #4A1A24;
+  --color-maroon-200: #5C2230;
 }
 
 html, body {
@@ -170,7 +208,7 @@ body {
 }
 
 .maplibregl-ctrl-attrib {
-  background: rgb(247 244 238 / 0.8);
+  background: color-mix(in srgb, var(--color-paper) 80%, transparent);
   color: var(--color-gray-600);
   font-family: var(--font-mono);
   font-size: 10px;

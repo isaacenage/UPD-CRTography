@@ -27,7 +27,7 @@ export default function DirectionsSheet({
   return (
     <div className="pt-1">
       <header className="rounded-sm overflow-hidden -mx-1" style={{ background: accent.color }}>
-        <div className="px-4 py-3 text-paper">
+        <div className="px-4 py-3 text-white">
           <div className="font-mono text-[9px] tracking-[0.2em] uppercase opacity-85 font-medium">
             Walking &middot; To
           </div>
@@ -52,7 +52,7 @@ export default function DirectionsSheet({
         <button
           type="button"
           onClick={onStart}
-          className="mt-3 w-full bg-forest-500 hover:bg-forest-600 text-paper rounded-sm py-3.5 min-h-[52px] font-bold tracking-wide text-sm flex items-center justify-center gap-2 transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-forest-500"
+          className="mt-3 w-full bg-forest-500 hover:bg-forest-600 text-white rounded-sm py-3.5 min-h-[52px] font-bold tracking-wide text-sm flex items-center justify-center gap-2 transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-forest-500"
         >
           Start
         </button>
@@ -71,7 +71,7 @@ export default function DirectionsSheet({
               className={[
                 "flex items-start gap-3 rounded-sm px-3 py-2 border",
                 active
-                  ? "bg-forest-50 border-forest-200"
+                  ? "bg-forest-50 dark:bg-forest-700 border-forest-200 dark:border-forest-500"
                   : "bg-paper border-gray-100",
               ].join(" ")}
             >
@@ -79,7 +79,7 @@ export default function DirectionsSheet({
                 aria-hidden
                 className={[
                   "shrink-0 grid place-items-center w-6 h-6 rounded-full font-mono text-[10px] font-bold",
-                  active ? "bg-forest-500 text-paper" : "bg-gray-100 text-gray-500",
+                  active ? "bg-forest-500 text-white" : "bg-gray-100 text-gray-500",
                 ].join(" ")}
               >
                 {i + 1}

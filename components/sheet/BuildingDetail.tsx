@@ -73,7 +73,7 @@ export default function BuildingDetail({
         className="rounded-sm overflow-hidden -mx-1"
         style={{ background: accent.color }}
       >
-        <div className="px-4 py-3 text-paper">
+        <div className="px-4 py-3 text-white">
           <div className="font-mono text-[9px] tracking-[0.2em] uppercase opacity-85 font-medium">
             {accent.label}
             {building.acronym ? <> &middot; {building.acronym}</> : null}
@@ -110,7 +110,7 @@ export default function BuildingDetail({
         type="button"
         disabled={!onRequestDirections || !directionsReady}
         onClick={() => onRequestDirections?.()}
-        className="mt-4 w-full bg-forest-500 hover:bg-forest-600 disabled:bg-gray-300 disabled:cursor-not-allowed text-paper rounded-sm py-3.5 min-h-[52px] font-bold tracking-wide text-sm flex items-center justify-center gap-2 transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-forest-500"
+        className="mt-4 w-full bg-forest-500 hover:bg-forest-600 disabled:bg-gray-300 disabled:cursor-not-allowed text-white rounded-sm py-3.5 min-h-[52px] font-bold tracking-wide text-sm flex items-center justify-center gap-2 transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-forest-500"
       >
         <svg
           viewBox="0 0 24 24"
@@ -171,7 +171,7 @@ function Badge({
         {symbol ? (
           <span
             aria-hidden
-            className="grid place-items-center w-5 h-5 rounded-full text-paper text-[11px] font-bold"
+            className="grid place-items-center w-5 h-5 rounded-full text-white text-[11px] font-bold"
             style={{ background: accent ?? "var(--color-gray-400)" }}
           >
             {symbol === "check" ? "✓" : symbol === "cross" ? "✗" : "?"}

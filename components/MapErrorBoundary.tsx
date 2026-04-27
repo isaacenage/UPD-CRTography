@@ -27,7 +27,7 @@ export default class MapErrorBoundary extends Component<{ children: ReactNode },
           className="absolute inset-0 grid place-items-center bg-paper px-6 text-center"
         >
           <div className="max-w-sm">
-            <div className="font-mono text-[10px] tracking-widest uppercase text-maroon-600 font-medium">
+            <div className="font-mono text-[10px] tracking-widest uppercase text-maroon-600 dark:text-maroon-300 font-medium">
               Map error
             </div>
             <h2 className="mt-1 text-base font-bold text-ink">
@@ -42,7 +42,7 @@ export default class MapErrorBoundary extends Component<{ children: ReactNode },
               onClick={() => {
                 if (typeof window !== "undefined") window.location.reload();
               }}
-              className="mt-4 rounded-sm bg-maroon-500 hover:bg-maroon-600 text-paper px-4 py-2 text-xs font-mono tracking-widest uppercase min-h-[44px]"
+              className="mt-4 rounded-sm bg-maroon-500 hover:bg-maroon-600 text-white px-4 py-2 text-xs font-mono tracking-widest uppercase min-h-[44px]"
             >
               Reload
             </button>

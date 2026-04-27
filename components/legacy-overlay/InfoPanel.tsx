@@ -10,13 +10,13 @@ export default function InfoPanel() {
       {open ? (
         <div className="bg-paper/95 backdrop-blur-sm border border-gray-200 rounded-sm shadow-[0_10px_40px_-16px_rgb(26_26_26_/_0.35)] w-[320px] max-w-[calc(100vw-2rem)]">
           <div className="flex items-center justify-between px-4 pt-3 pb-2 border-b border-gray-200">
-            <span className="font-mono text-[10px] tracking-widest uppercase text-maroon-600 font-medium">
+            <span className="font-mono text-[10px] tracking-widest uppercase text-maroon-600 dark:text-maroon-300 font-medium">
               About this map
             </span>
             <button
               type="button"
               onClick={() => setOpen(false)}
-              className="text-gray-500 hover:text-maroon-500 transition-colors text-lg leading-none w-6 h-6 flex items-center justify-center"
+              className="text-gray-500 hover:text-maroon-500 dark:hover:text-maroon-300 transition-colors text-lg leading-none w-6 h-6 flex items-center justify-center"
               aria-label="Close info panel"
             >
               &times;
@@ -40,7 +40,7 @@ export default function InfoPanel() {
                 href="https://www.facebook.com/share/p/1HwxPg9ETt/"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-maroon-500 hover:text-maroon-600 underline underline-offset-2"
+                className="text-maroon-500 dark:text-maroon-300 hover:text-maroon-600 dark:hover:text-maroon-200 underline underline-offset-2"
               >
                 Philippine Collegian
               </a>

@@ -30,7 +30,7 @@ export type RouteResult = Readonly<{
   distanceLabel: string;
   durationLabel: string;
   steps: readonly RouteStep[];
-  profile: "walking";
+  profile: "driving" | "walking";
   fallback: boolean;
 }>;
 
@@ -41,20 +41,28 @@ export type DirectionsService = {
 };
 
 const DEFAULT_OSRM = "https://router.project-osrm.org/route/v1";
-const FOREST = "#014421";
-const PAPER = "#F7F4EE";
-
-const ROUTE_LINE_LAYER_PATTERNS = [
-  "maplibre-gl-directions-routeline",
-  "routeline",
-];
-
-function isRouteLineLayer(id: string): boolean {
-  return ROUTE_LINE_LAYER_PATTERNS.some((p) => id.includes(p));
-}
+// Brand red used by the generated line and the waypoint outlines.
+const ROUTE_RED = "#DC2626";
+const ROUTE_WHITE = "#FFFFFF";
 
 function isRouteCasingLayer(id: string): boolean {
   return id.includes("routeline-casing");
+}
+
+function isRouteLineLayer(id: string): boolean {
+  // Match any routeline layer (primary or alt), but exclude casing — that's
+  // handled separately so it can sit underneath as the white halo.
+  return id.includes("routeline") && !id.includes("casing");
+}
+
+function isWaypointCasingLayer(id: string): boolean {
+  // Outer ring of each waypoint marker (start + end pin).
+  return id.includes("waypoint") && id.includes("casing");
+}
+
+function isWaypointFillLayer(id: string): boolean {
+  // Inner solid circle of each waypoint marker.
+  return id.includes("waypoint") && !id.includes("casing");
 }
 
 // Loose duck-typed shape: the plugin's real type has protected fields the
@@ -138,9 +146,26 @@ function rawToResult(raw: RouteRaw): RouteResult | null {
     distanceLabel: formatDistance(distance),
     durationLabel: formatDuration(duration),
     steps,
-    profile: "walking",
+    profile: "driving",
     fallback: false,
   };
+}
+
+// OSRM may return alternatives — pick the one with the smallest distance
+// so the user gets the literal shortest legal path, not the fastest.
+function pickShortestRoute(routes: ReadonlyArray<RouteRaw>): RouteRaw | null {
+  if (!routes || routes.length === 0) return null;
+  let best = routes[0];
+  let bestDist = Number.isFinite(best?.distance) ? Number(best!.distance) : Infinity;
+  for (let i = 1; i < routes.length; i++) {
+    const r = routes[i];
+    const d = Number.isFinite(r?.distance) ? Number(r!.distance) : Infinity;
+    if (d < bestDist) {
+      bestDist = d;
+      best = r;
+    }
+  }
+  return best ?? null;
 }
 
 export async function createDirections(map: MapLibreMap): Promise<DirectionsService> {
@@ -156,8 +181,24 @@ export async function createDirections(map: MapLibreMap): Promise<DirectionsServ
     const apiBase = process.env.NEXT_PUBLIC_OSRM_URL || DEFAULT_OSRM;
     plugin = new Ctor(map, {
       api: apiBase,
-      profile: "walking",
-      requestOptions: { overview: "full", steps: "true", geometries: "geojson" },
+      // Driving profile so OSM road rules (oneways, turn restrictions,
+      // illegal U-turns) are enforced. Walking ignored all of these.
+      profile: "driving",
+      requestOptions: {
+        overview: "full",
+        steps: "true",
+        geometries: "geojson",
+        // Ask for alternatives so we can post-pick the shortest by distance
+        // (OSRM's driving profile minimizes time by default; this gives us
+        // an honest "shortest legal" route).
+        alternatives: "true",
+        // Forbid an immediate U-turn at the origin — the most common
+        // illegal-route artifact when starting on a divided road.
+        continue_straight: "true",
+        // Route to the curb side of the destination, which respects the
+        // travel direction on multi-lane roads.
+        approaches: "curb;curb",
+      },
     } as unknown as ConstructorParameters<typeof Ctor>[1]) as unknown as PluginInstance;
 
     const onRoutes = (e: unknown) => {
@@ -166,22 +207,38 @@ export async function createDirections(map: MapLibreMap): Promise<DirectionsServ
     };
     plugin?.on("fetchroutesend", onRoutes);
 
-    // Brand the route line/casing layers after the plugin instantiates them.
-    // Done on the next animation frame so the layers exist.
+    // Brand the route line + waypoint markers once layers exist. Called on
+    // next animation frame because the plugin adds layers in its constructor
+    // tail, after we get the instance back.
     requestAnimationFrame(() => {
       const layers = plugin?.configuration?.layers ?? [];
       for (const layer of layers) {
         if (!map.getLayer(layer.id)) continue;
         const type = (map.getLayer(layer.id) as unknown as { type?: string })?.type;
-        if (type !== "line") continue;
-        if (isRouteCasingLayer(layer.id)) {
-          map.setPaintProperty(layer.id, "line-color", PAPER);
-          map.setPaintProperty(layer.id, "line-width", 9);
-          map.setPaintProperty(layer.id, "line-opacity", 0.95);
-        } else if (isRouteLineLayer(layer.id)) {
-          map.setPaintProperty(layer.id, "line-color", FOREST);
-          map.setPaintProperty(layer.id, "line-width", 5);
-          map.setPaintProperty(layer.id, "line-opacity", 0.9);
+        if (type === "line") {
+          if (isRouteCasingLayer(layer.id)) {
+            // White casing sits under the red line so the route reads
+            // clearly on both light and dark basemaps.
+            map.setPaintProperty(layer.id, "line-color", ROUTE_WHITE);
+            map.setPaintProperty(layer.id, "line-width", 9);
+            map.setPaintProperty(layer.id, "line-opacity", 1);
+          } else if (isRouteLineLayer(layer.id)) {
+            map.setPaintProperty(layer.id, "line-color", ROUTE_RED);
+            map.setPaintProperty(layer.id, "line-width", 5);
+            map.setPaintProperty(layer.id, "line-opacity", 1);
+          }
+        } else if (type === "circle") {
+          if (isWaypointCasingLayer(layer.id)) {
+            // Outer ring → red. The visible "thick outline" of the marker.
+            map.setPaintProperty(layer.id, "circle-color", ROUTE_RED);
+            map.setPaintProperty(layer.id, "circle-radius", 11);
+            map.setPaintProperty(layer.id, "circle-opacity", 1);
+          } else if (isWaypointFillLayer(layer.id)) {
+            // Inner fill → white. The visible "white circle" of the marker.
+            map.setPaintProperty(layer.id, "circle-color", ROUTE_WHITE);
+            map.setPaintProperty(layer.id, "circle-radius", 7);
+            map.setPaintProperty(layer.id, "circle-opacity", 1);
+          }
         }
       }
     });
@@ -206,7 +263,7 @@ export async function createDirections(map: MapLibreMap): Promise<DirectionsServ
         id: casingId,
         type: "line",
         source: sourceId,
-        paint: { "line-color": PAPER, "line-width": 9, "line-opacity": 0.95 },
+        paint: { "line-color": ROUTE_WHITE, "line-width": 9, "line-opacity": 1 },
         layout: { "line-cap": "round", "line-join": "round" },
       });
       map.addLayer({
@@ -214,9 +271,9 @@ export async function createDirections(map: MapLibreMap): Promise<DirectionsServ
         type: "line",
         source: sourceId,
         paint: {
-          "line-color": FOREST,
+          "line-color": ROUTE_RED,
           "line-width": 5,
-          "line-opacity": 0.9,
+          "line-opacity": 1,
           "line-dasharray": [1.5, 1.5],
         },
         layout: { "line-cap": "round", "line-join": "round" },
@@ -254,8 +311,8 @@ export async function createDirections(map: MapLibreMap): Promise<DirectionsServ
               if (lastFetchedRoutes && lastFetchedRoutes.length > 0) {
                 clearTimeout(timeout);
                 signal?.removeEventListener("abort", onAbort);
-                const parsed = rawToResult(lastFetchedRoutes[0]);
-                resolve(parsed);
+                const shortest = pickShortestRoute(lastFetchedRoutes);
+                resolve(shortest ? rawToResult(shortest) : null);
                 return;
               }
               if (signal?.aborted) return;

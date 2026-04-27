@@ -106,7 +106,7 @@ export default function SearchBar({ features, onPick }: Props) {
               setQuery("");
               inputRef.current?.focus();
             }}
-            className="absolute right-2 top-1/2 -translate-y-1/2 grid place-items-center w-7 h-7 rounded-sm text-gray-500 hover:text-maroon-600 hover:bg-maroon-50"
+            className="absolute right-2 top-1/2 -translate-y-1/2 grid place-items-center w-7 h-7 rounded-sm text-gray-500 hover:text-maroon-600 dark:hover:text-maroon-300 hover:bg-maroon-50"
           >
             ×
           </button>
@@ -135,7 +135,7 @@ export default function SearchBar({ features, onPick }: Props) {
                   onClick={() => choose(hit)}
                   className="w-full text-left px-3 py-2.5 hover:bg-maroon-50 flex items-center gap-3 border-b border-gray-100 last:border-b-0"
                 >
-                  <span className="shrink-0 font-mono text-[10px] tracking-widest uppercase text-maroon-600 bg-maroon-50 border border-maroon-100 rounded-sm px-1.5 py-0.5">
+                  <span className="shrink-0 font-mono text-[10px] tracking-widest uppercase text-maroon-600 dark:text-maroon-300 bg-maroon-50 border border-maroon-100 dark:border-maroon-300 rounded-sm px-1.5 py-0.5">
                     {hit.building.acronym || "—"}
                   </span>
                   <span className="flex-1 min-w-0">

@@ -19,7 +19,7 @@ export default function FollowModeOverlay({ route, currentStepIndex, onStop }: P
 
   return (
     <div
-      className="fixed left-0 right-0 z-40 bg-forest-500 text-paper shadow-[0_12px_24px_-12px_rgb(1,68,33,0.5)]"
+      className="fixed left-0 right-0 z-40 bg-forest-500 text-white shadow-[0_12px_24px_-12px_rgb(1,68,33,0.5)]"
       style={{ paddingTop: "var(--safe-top)" }}
       role="status"
       aria-live="polite"
@@ -41,7 +41,7 @@ export default function FollowModeOverlay({ route, currentStepIndex, onStop }: P
           type="button"
           onClick={() => mapBus.dispatch("locate", undefined)}
           aria-label="Recenter map on you"
-          className="shrink-0 rounded-sm border border-paper/40 px-2.5 py-1.5 text-[10px] font-mono tracking-widest uppercase hover:bg-paper/10 min-h-[36px] min-w-[36px]"
+          className="shrink-0 rounded-sm border border-white/40 px-2.5 py-1.5 text-[10px] font-mono tracking-widest uppercase hover:bg-white/10 min-h-[36px] min-w-[36px]"
         >
           Recenter
         </button>
@@ -49,7 +49,7 @@ export default function FollowModeOverlay({ route, currentStepIndex, onStop }: P
           type="button"
           onClick={onStop}
           aria-label="Stop following the route"
-          className="shrink-0 rounded-sm bg-paper text-forest-500 px-3 py-1.5 text-[10px] font-mono tracking-widest uppercase hover:bg-gold-300 min-h-[36px]"
+          className="shrink-0 rounded-sm bg-white text-forest-700 px-3 py-1.5 text-[10px] font-mono tracking-widest uppercase hover:bg-gold-300 min-h-[36px]"
         >
           Stop
         </button>

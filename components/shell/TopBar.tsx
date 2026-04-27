@@ -1,6 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
+import ThemeToggle from "./ThemeToggle";
 
 type Props = {
   // Slot for the search input. Phase 3 fills it with <SearchBar />; Phase 1
@@ -24,7 +25,7 @@ export default function TopBar({ searchSlot }: Props) {
         }}
       >
         <div className="shrink-0 flex flex-col leading-none">
-          <span className="font-mono text-[9px] tracking-[0.2em] uppercase text-maroon-600 font-medium">
+          <span className="font-mono text-[9px] tracking-[0.2em] uppercase text-maroon-600 dark:text-maroon-300 font-medium">
             UPD
           </span>
           <span className="font-bold tracking-tight text-ink text-base mt-0.5">
@@ -32,6 +33,7 @@ export default function TopBar({ searchSlot }: Props) {
           </span>
         </div>
         <div className="flex-1 min-w-0">{searchSlot ?? <SearchPlaceholder />}</div>
+        <ThemeToggle />
       </div>
     </header>
   );
