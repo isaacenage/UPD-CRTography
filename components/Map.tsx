@@ -24,6 +24,14 @@ const FILL_LAYER = "up-buildings-fill";
 const LINE_LAYER = "up-buildings-line";
 const LABEL_LAYER = "up-buildings-label";
 
+// Separate source/layer for user-contributed building points so they're
+// visually distinct from the canonical polygons and so the dev can tell
+// at a glance which markers haven't been folded into the dataset yet.
+const CONTRIB_SOURCE_ID = "up-contributions";
+const CONTRIB_HALO_LAYER = "up-contributions-halo";
+const CONTRIB_POINT_LAYER = "up-contributions-point";
+const CONTRIB_LABEL_LAYER = "up-contributions-label";
+
 const COLOR_INK = COLOR.ink;
 const COLOR_PAPER = COLOR.paper;
 const COLOR_MAROON_500 = COLOR.maroon500;
@@ -55,6 +63,15 @@ type Props = {
   onSelect: (selection: Selection | null) => void;
 };
 
+function escapeHtmlSimple(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 function prefersReducedMotion(): boolean {
   if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
     return false;
@@ -83,6 +100,10 @@ export default function Map({ filters, selectedId, onSelect }: Props) {
     new globalThis.Map(),
   );
   const datasetRef = useRef<GeoJSON.FeatureCollection | null>(null);
+  const contributionsRef = useRef<GeoJSON.FeatureCollection>({
+    type: "FeatureCollection",
+    features: [],
+  });
   const buildingsBboxRef = useRef<readonly [readonly [number, number], readonly [number, number]] | null>(null);
   const onSelectRef = useRef(onSelect);
 
@@ -205,6 +226,33 @@ export default function Map({ filters, selectedId, onSelect }: Props) {
       routeAbortRef.current?.abort();
       routeAbortRef.current = null;
       directionsServiceRef.current?.clear();
+    });
+
+    const offContributions = mapBus.on("contributions", ({ items }) => {
+      const fc: GeoJSON.FeatureCollection = {
+        type: "FeatureCollection",
+        features: items.map((c) => ({
+          type: "Feature",
+          properties: {
+            id: c.id,
+            name: c.buildingName,
+            gender: c.gender,
+            access: c.access,
+            status: c.status,
+          },
+          geometry: {
+            type: "Point",
+            coordinates: [c.longitude, c.latitude],
+          },
+        })),
+      };
+      contributionsRef.current = fc;
+      const src = map.getSource(CONTRIB_SOURCE_ID) as GeoJSONSource | undefined;
+      if (src) {
+        src.setData(fc);
+      } else if (map.isStyleLoaded()) {
+        addContributionLayers(fc);
+      }
     });
 
     // Follow mode: while active, pan camera to each user-location fix.
@@ -355,10 +403,97 @@ export default function Map({ filters, selectedId, onSelect }: Props) {
       }
     }
 
+    function addContributionLayers(data: GeoJSON.FeatureCollection) {
+      if (!map.getSource(CONTRIB_SOURCE_ID)) {
+        map.addSource(CONTRIB_SOURCE_ID, {
+          type: "geojson",
+          data,
+        });
+      } else {
+        const src = map.getSource(CONTRIB_SOURCE_ID) as GeoJSONSource;
+        src.setData(data);
+      }
+
+      // Soft halo first so the inner dot stays legible against the fill.
+      if (!map.getLayer(CONTRIB_HALO_LAYER)) {
+        map.addLayer({
+          id: CONTRIB_HALO_LAYER,
+          type: "circle",
+          source: CONTRIB_SOURCE_ID,
+          paint: {
+            "circle-radius": [
+              "interpolate",
+              ["linear"],
+              ["zoom"],
+              14,
+              10,
+              18,
+              22,
+            ],
+            "circle-color": COLOR_FOREST_500,
+            "circle-opacity": 0.18,
+            "circle-stroke-width": 0,
+          },
+        });
+      }
+
+      if (!map.getLayer(CONTRIB_POINT_LAYER)) {
+        map.addLayer({
+          id: CONTRIB_POINT_LAYER,
+          type: "circle",
+          source: CONTRIB_SOURCE_ID,
+          paint: {
+            "circle-radius": [
+              "interpolate",
+              ["linear"],
+              ["zoom"],
+              14,
+              5,
+              18,
+              9,
+            ],
+            "circle-color": COLOR_FOREST_500,
+            "circle-stroke-color": COLOR_PAPER,
+            "circle-stroke-width": 2,
+          },
+        });
+      }
+
+      if (!map.getLayer(CONTRIB_LABEL_LAYER)) {
+        map.addLayer({
+          id: CONTRIB_LABEL_LAYER,
+          type: "symbol",
+          source: CONTRIB_SOURCE_ID,
+          layout: {
+            "text-field": [
+              "concat",
+              "+ ",
+              ["coalesce", ["get", "name"], "User contribution"],
+            ],
+            "text-font": ["Noto Sans Bold"],
+            "text-size": ["interpolate", ["linear"], ["zoom"], 14, 9, 18, 12],
+            "text-letter-spacing": 0.06,
+            "text-transform": "uppercase",
+            "text-offset": [0, 1.2],
+            "text-anchor": "top",
+            "text-allow-overlap": false,
+            "text-padding": 2,
+          },
+          paint: {
+            "text-color": COLOR_PAPER,
+            "text-halo-color": COLOR_FOREST_500,
+            "text-halo-width": 1.4,
+            "text-halo-blur": 0.4,
+          },
+        });
+      }
+    }
+
     // Stash so the theme-change effect can rehydrate overlays after
     // setStyle without re-fetching the GeoJSON.
     reAddOverlaysRef.current = () => {
       if (datasetRef.current) addOverlays(datasetRef.current);
+      addContributionLayers(contributionsRef.current);
     };
 
     map.on("load", async () => {
@@ -384,6 +519,9 @@ export default function Map({ filters, selectedId, onSelect }: Props) {
         datasetRef.current = data;
 
         addOverlays(data);
+        // Render any contributions that arrived via mapBus before the
+        // basemap finished loading.
+        addContributionLayers(contributionsRef.current);
 
         // Frame the building extent on first load + remember the bbox
         // so the Home FAB can re-fit on demand.
@@ -413,6 +551,7 @@ export default function Map({ filters, selectedId, onSelect }: Props) {
       offRequestRoute();
       offClearRoute();
       offFollowMode();
+      offContributions();
       followOff?.();
       followOff = null;
       routeAbortRef.current?.abort();
@@ -481,6 +620,56 @@ export default function Map({ filters, selectedId, onSelect }: Props) {
     map.on("idle", tryReAdd);
     map.setStyle(basemapUrlFor(theme), { diff: false });
   }, [theme]);
+
+  // Contribution-point click → ephemeral popup. Doesn't drive the bottom
+  // sheet (those rows aren't part of the canonical dataset yet) but lets
+  // the user verify what they submitted and lets a dev cross-check pins
+  // before approving them.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+
+    let activePopup: maplibregl.Popup | null = null;
+
+    const onContribClick = (
+      e: maplibregl.MapMouseEvent & { features?: maplibregl.MapGeoJSONFeature[] },
+    ) => {
+      const f = e.features?.[0];
+      if (!f) return;
+      const props = (f.properties ?? {}) as Record<string, string>;
+      const name = escapeHtmlSimple(props.name ?? "User contribution");
+      const gender = escapeHtmlSimple(props.gender ?? "");
+      const access = escapeHtmlSimple(props.access ?? "");
+      const status = escapeHtmlSimple(props.status ?? "pending");
+      const html = `
+        <div style="padding:10px 12px;font-family:var(--font-sans);min-width:180px">
+          <div style="font-family:var(--font-mono);font-size:9px;letter-spacing:0.18em;text-transform:uppercase;color:var(--color-forest-500)">User contribution · ${status}</div>
+          <div style="font-weight:700;margin-top:4px;color:var(--color-ink)">${name}</div>
+          <div style="font-size:11px;color:var(--color-gray-600);margin-top:4px">${gender}${gender && access ? " · " : ""}${access}</div>
+        </div>`;
+      activePopup?.remove();
+      activePopup = new maplibregl.Popup({ closeButton: true, closeOnClick: true })
+        .setLngLat(e.lngLat)
+        .setHTML(html)
+        .addTo(map);
+    };
+
+    let registered = false;
+    const tryRegister = () => {
+      if (registered || !map.getLayer(CONTRIB_POINT_LAYER)) return;
+      map.on("click", CONTRIB_POINT_LAYER, onContribClick);
+      registered = true;
+    };
+    tryRegister();
+    if (!registered) map.on("idle", tryRegister);
+
+    return () => {
+      map.off("idle", tryRegister);
+      if (registered) map.off("click", CONTRIB_POINT_LAYER, onContribClick);
+      activePopup?.remove();
+      activePopup = null;
+    };
+  }, []);
 
   // Click → set selection (sheet renders detail; Map flies to feature).
   useEffect(() => {

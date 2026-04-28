@@ -5,6 +5,8 @@ import TopBar from "./TopBar";
 import ChipRow from "./ChipRow";
 import LocateFab from "./LocateFab";
 import HomeFab from "./HomeFab";
+import EndRouteFab from "./EndRouteFab";
+import ContributeFab from "./ContributeFab";
 import { useMediaQuery, MQ_DESKTOP } from "@/lib/dom/useMediaQuery";
 
 type Props = {
@@ -25,6 +27,12 @@ type Props = {
   // Desktop ≥md only — original overlay cards (TitleCard / InfoPanel /
   // Legend) rendered in a sidebar so power users keep the dense view.
   desktopSidebar?: ReactNode;
+  // EndRouteFab is rendered when a route line is up so the user can clear
+  // navigation without touching the bottom sheet.
+  routeActive?: boolean;
+  onEndRoute?: () => void;
+  // Left-aligned contribute affordance — opens the new-building flow.
+  onContribute?: () => void;
 };
 
 export default function AppShell({
@@ -34,6 +42,9 @@ export default function AppShell({
   bottomSheet,
   infoPanel,
   desktopSidebar,
+  routeActive,
+  onEndRoute,
+  onContribute,
 }: Props) {
   const isDesktop = useMediaQuery(MQ_DESKTOP);
 
@@ -59,6 +70,8 @@ export default function AppShell({
         ) : null}
         <HomeFab />
         <LocateFab />
+        {routeActive && onEndRoute ? <EndRouteFab onEnd={onEndRoute} /> : null}
+        {onContribute ? <ContributeFab onClick={onContribute} /> : null}
         {isDesktop && desktopSidebar ? (
           <aside
             className="hidden md:flex absolute top-3 left-3 flex-col gap-3 max-w-[360px] z-10 pointer-events-none"

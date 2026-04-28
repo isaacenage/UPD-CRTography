@@ -29,6 +29,22 @@ type EventMap = {
   followMode: { active: boolean };
   // Triggered by Map for non-fatal errors (Phase 6 wires log).
   error: { source: string; message: string };
+  // Page pushes the current contribution set to Map; Map renders them as
+  // a separate point layer so the dev (and the user who submitted) can
+  // distinguish unofficial entries from the canonical building polygons.
+  contributions: {
+    items: ReadonlyArray<
+      Readonly<{
+        id: string;
+        buildingName: string;
+        longitude: number;
+        latitude: number;
+        gender: string;
+        access: string;
+        status: string;
+      }>
+    >;
+  };
 };
 
 class MapBus {

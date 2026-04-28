@@ -52,7 +52,9 @@ export default function InfoPanelModal({ open, onClose }: Props) {
       }}
     >
       {/* Close button — fixed to the modal corner, not part of the
-          content flow, so it doesn't crowd the typography. */}
+          content flow, so it doesn't crowd the typography. The hit
+          target sits inside a 44px chip well clear of the iOS status
+          bar / Dynamic Island via safe-area insets. */}
       <button
         type="button"
         onClick={(e) => {
@@ -60,7 +62,11 @@ export default function InfoPanelModal({ open, onClose }: Props) {
           onClose();
         }}
         aria-label="Close"
-        className="absolute top-4 right-4 w-11 h-11 grid place-items-center text-black dark:text-white hover:opacity-70 transition-opacity focus:outline-none focus-visible:ring-2 focus-visible:ring-current rounded-sm"
+        className="absolute z-20 w-12 h-12 grid place-items-center rounded-full bg-paper/80 dark:bg-black/50 text-black dark:text-white border border-gray-200/60 dark:border-white/15 backdrop-blur-sm hover:bg-paper dark:hover:bg-black/70 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-current"
+        style={{
+          top: "calc(max(var(--safe-top), 0px) + 12px)",
+          right: "calc(max(var(--safe-right), 0px) + 12px)",
+        }}
       >
         <svg
           viewBox="0 0 24 24"
@@ -78,10 +84,12 @@ export default function InfoPanelModal({ open, onClose }: Props) {
       </button>
 
       {/* Stop click bubbling on the text column so highlighting copy
-          doesn't accidentally dismiss the modal. */}
+          doesn't accidentally dismiss the modal. Top padding leaves a
+          comfortable gap below the close button on tall safe-area
+          devices. */}
       <div
         onClick={(e) => e.stopPropagation()}
-        className="h-full w-full overflow-y-auto px-6 py-12 sm:py-16 grid place-items-center"
+        className="h-full w-full overflow-y-auto px-6 pt-20 sm:pt-24 pb-12 sm:pb-16 grid place-items-center"
       >
         <div className="w-full max-w-xl mx-auto space-y-6 leading-relaxed">
           <div

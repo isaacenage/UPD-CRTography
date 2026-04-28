@@ -24,6 +24,9 @@ import type { RouteResult } from "@/lib/directions";
 import { mapBus } from "@/lib/mapBus";
 import MapErrorBoundary from "@/components/MapErrorBoundary";
 import MapSkeleton from "@/components/MapSkeleton";
+import ContributeModal from "@/components/contribute/ContributeModal";
+import { fetchAllContributions } from "@/lib/contributions/api";
+import type { Contribution } from "@/lib/contributions/types";
 
 const Map = dynamic(() => import("@/components/Map"), {
   ssr: false,
@@ -80,7 +83,45 @@ export default function Page() {
   const [selected, setSelected] = useState<Selection | null>(null);
   const [snap, setSnap] = useState<SheetSnap>("peek");
   const [aboutOpen, setAboutOpen] = useState(false);
+  const [contributeOpen, setContributeOpen] = useState(false);
+  const [contributions, setContributions] = useState<readonly Contribution[]>([]);
   const dataset = useDataset();
+
+  // Load contributions (Supabase + localStorage cache) on mount and push
+  // them to the Map. Re-pushed whenever the set changes.
+  useEffect(() => {
+    let cancelled = false;
+    fetchAllContributions()
+      .then((items) => {
+        if (cancelled) return;
+        setContributions(items);
+      })
+      .catch(() => {
+        // Local-only mode is the safe fallback — fetchAllContributions
+        // already swallows Supabase errors and returns local cache.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    mapBus.dispatch("contributions", {
+      items: contributions.map((c) => ({
+        id: c.id,
+        buildingName: c.buildingName,
+        longitude: c.longitude,
+        latitude: c.latitude,
+        gender: c.gender,
+        access: c.access,
+        status: c.status,
+      })),
+    });
+  }, [contributions]);
+
+  const handleContributionSubmitted = useCallback((c: Contribution) => {
+    setContributions((prev) => [...prev, c]);
+  }, []);
 
   // Routing state
   const [route, setRoute] = useState<RouteResult | null>(null);
@@ -325,6 +366,9 @@ export default function Page() {
         infoPanel={
           <InfoPanel open={aboutOpen} onOpenChange={setAboutOpen} />
         }
+        routeActive={Boolean(route)}
+        onEndRoute={handleEndRoute}
+        onContribute={() => setContributeOpen(true)}
         desktopSidebar={
           <div className="flex flex-col gap-3 pointer-events-auto">
             <TitleCard />
@@ -337,6 +381,12 @@ export default function Page() {
       />
 
       <InfoPanelModal open={aboutOpen} onClose={() => setAboutOpen(false)} />
+
+      <ContributeModal
+        open={contributeOpen}
+        onClose={() => setContributeOpen(false)}
+        onSubmitted={handleContributionSubmitted}
+      />
 
       <PermissionExplainer
         open={explainerOpen}
