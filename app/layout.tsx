@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Inter, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import SwRegister from "@/components/SwRegister";
+import NoZoomGate from "@/components/NoZoomGate";
 import { ThemeProvider, NO_FOUC_SCRIPT } from "@/lib/theme/context";
 
 const inter = Inter({
@@ -67,6 +68,7 @@ export default function RootLayout({
       </head>
       <body className="bg-paper text-ink antialiased min-h-[100svh] overscroll-none">
         <ThemeProvider>
+          <NoZoomGate />
           {children}
           <SwRegister />
         </ThemeProvider>

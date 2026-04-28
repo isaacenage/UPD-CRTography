@@ -126,11 +126,26 @@ html, body {
      100vh — it stays at the maximum even when the URL bar expands. */
   height: 100%;
   height: 100dvh;
+  /* Disable pinch-zoom + double-tap-zoom of the page. MapLibre's canvas
+     re-enables `touch-action: none` so the map still handles pinch
+     gestures internally. iOS Safari ignores `user-scalable=no`, so this
+     is paired with the JS gesture-event preventer in <NoZoomGate /> for
+     full coverage. */
+  touch-action: pan-x pan-y;
 }
 
 body {
   overscroll-behavior: none;
   -webkit-tap-highlight-color: transparent;
+}
+
+/* Map canvas owns its own touch gestures — pinch-zoom of the map is
+   intentional and must keep working. MapLibre sets `touch-action: none`
+   on the canvas itself; this rule pins the parent so the gesture chain
+   is never interrupted by the document-level `pan-x pan-y`. */
+.maplibregl-canvas-container,
+.maplibregl-canvas-container.maplibregl-touch-zoom-rotate.maplibregl-touch-drag-pan {
+  touch-action: none;
 }
 
 #__next, body > main {
