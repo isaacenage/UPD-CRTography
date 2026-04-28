@@ -8,6 +8,7 @@ import {
 } from "@/lib/buildingFormat";
 import { distanceMeters, formatDistance } from "@/lib/geo/distance";
 import { mapBus } from "@/lib/mapBus";
+import BuildingPhotoPanel from "./BuildingPhoto";
 
 type UserLocation = { lng: number; lat: number; accuracy: number } | null;
 
@@ -144,9 +145,10 @@ export default function BuildingDetail({
         </a>
       </div>
 
-      <div className="mt-4 rounded-sm bg-gray-100 border border-gray-200 aspect-[4/3] grid place-items-center text-gray-400 text-xs font-mono tracking-widest uppercase">
-        Photo · coming soon
-      </div>
+      <BuildingPhotoPanel
+        buildingId={building.id}
+        buildingName={building.name}
+      />
     </div>
   );
 }
