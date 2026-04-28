@@ -18,6 +18,7 @@ import type { DirectionsService } from "@/lib/directions";
 import { log } from "@/lib/log";
 import { COLOR } from "@/lib/theme";
 import { useTheme, type Theme } from "@/lib/theme/context";
+import type { Contribution } from "@/lib/contributions/types";
 
 const SOURCE_ID = "up-buildings";
 const FILL_LAYER = "up-buildings-fill";
@@ -61,7 +62,30 @@ type Props = {
   filters: Filters;
   selectedId: number | null;
   onSelect: (selection: Selection | null) => void;
+  contributions: readonly Contribution[];
 };
+
+function contributionsToFC(
+  items: readonly Contribution[],
+): GeoJSON.FeatureCollection {
+  return {
+    type: "FeatureCollection",
+    features: items.map((c) => ({
+      type: "Feature",
+      properties: {
+        id: c.id,
+        name: c.buildingName,
+        gender: c.gender,
+        access: c.access,
+        status: c.status,
+      },
+      geometry: {
+        type: "Point",
+        coordinates: [c.longitude, c.latitude],
+      },
+    })),
+  };
+}
 
 function escapeHtmlSimple(value: string): string {
   return value
@@ -79,9 +103,14 @@ function prefersReducedMotion(): boolean {
   return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 }
 
-export default function Map({ filters, selectedId, onSelect }: Props) {
+export default function Map({ filters, selectedId, onSelect, contributions }: Props) {
   const { theme } = useTheme();
   const themeRef = useRef<Theme>(theme);
+  // Capture the boot theme synchronously so the mount effect uses the
+  // value at the moment of mount, not a stale closure if React batches
+  // the first render with a theme update.
+  const bootThemeRef = useRef<Theme>(theme);
+  bootThemeRef.current = theme;
 
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
@@ -100,10 +129,14 @@ export default function Map({ filters, selectedId, onSelect }: Props) {
     new globalThis.Map(),
   );
   const datasetRef = useRef<GeoJSON.FeatureCollection | null>(null);
-  const contributionsRef = useRef<GeoJSON.FeatureCollection>({
-    type: "FeatureCollection",
-    features: [],
-  });
+  // Seed from the prop so the map's `load` handler — which calls
+  // addContributionLayers(contributionsRef.current) at the end of its
+  // initial setup — sees the correct data even when the prop arrived
+  // before the map finished mounting/loading. Subsequent prop changes
+  // are propagated by the useEffect further down.
+  const contributionsRef = useRef<GeoJSON.FeatureCollection>(
+    contributionsToFC(contributions),
+  );
   const buildingsBboxRef = useRef<readonly [readonly [number, number], readonly [number, number]] | null>(null);
   const onSelectRef = useRef(onSelect);
 
@@ -115,15 +148,16 @@ export default function Map({ filters, selectedId, onSelect }: Props) {
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
 
-    // Always boot the basemap as light, regardless of the resolved theme.
-    // If the user's theme is dark, the theme-change effect below sees the
-    // ref/theme mismatch on its first run and performs the setStyle swap —
-    // a single codepath then owns every basemap transition.
-    themeRef.current = "light";
+    // Boot the basemap with the resolved theme so the initial paint matches
+    // the UI (no flash, no swap-on-mount). The theme-change effect below
+    // returns early on first run because themeRef and theme already match;
+    // it only fires on subsequent toggles.
+    const bootTheme = bootThemeRef.current;
+    themeRef.current = bootTheme;
 
     const map = new maplibregl.Map({
       container: containerRef.current,
-      style: BASEMAP_LIGHT,
+      style: basemapUrlFor(bootTheme),
       center: [121.0685, 14.6537],
       zoom: 15.5,
       minZoom: 14,
@@ -226,33 +260,6 @@ export default function Map({ filters, selectedId, onSelect }: Props) {
       routeAbortRef.current?.abort();
       routeAbortRef.current = null;
       directionsServiceRef.current?.clear();
-    });
-
-    const offContributions = mapBus.on("contributions", ({ items }) => {
-      const fc: GeoJSON.FeatureCollection = {
-        type: "FeatureCollection",
-        features: items.map((c) => ({
-          type: "Feature",
-          properties: {
-            id: c.id,
-            name: c.buildingName,
-            gender: c.gender,
-            access: c.access,
-            status: c.status,
-          },
-          geometry: {
-            type: "Point",
-            coordinates: [c.longitude, c.latitude],
-          },
-        })),
-      };
-      contributionsRef.current = fc;
-      const src = map.getSource(CONTRIB_SOURCE_ID) as GeoJSONSource | undefined;
-      if (src) {
-        src.setData(fc);
-      } else if (map.isStyleLoaded()) {
-        addContributionLayers(fc);
-      }
     });
 
     // Follow mode: while active, pan camera to each user-location fix.
@@ -551,7 +558,6 @@ export default function Map({ filters, selectedId, onSelect }: Props) {
       offRequestRoute();
       offClearRoute();
       offFollowMode();
-      offContributions();
       followOff?.();
       followOff = null;
       routeAbortRef.current?.abort();
@@ -568,6 +574,20 @@ export default function Map({ filters, selectedId, onSelect }: Props) {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Sync the contributions prop to the live source. The mount-time seed of
+  // contributionsRef handles the first paint; this effect handles every
+  // subsequent change (and is the only path that runs after submit). If the
+  // map's `load` handler hasn't installed the source yet, updating the ref
+  // is enough — the load handler reads it on its way out.
+  useEffect(() => {
+    const fc = contributionsToFC(contributions);
+    contributionsRef.current = fc;
+    const map = mapRef.current;
+    if (!map) return;
+    const src = map.getSource(CONTRIB_SOURCE_ID) as GeoJSONSource | undefined;
+    if (src) src.setData(fc);
+  }, [contributions]);
 
   // Swap the basemap when the theme changes. setStyle wipes everything we
   // added (buildings + directions plugin layers), so we tear down the

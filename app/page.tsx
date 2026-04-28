@@ -87,8 +87,10 @@ export default function Page() {
   const [contributions, setContributions] = useState<readonly Contribution[]>([]);
   const dataset = useDataset();
 
-  // Load contributions (Supabase + localStorage cache) on mount and push
-  // them to the Map. Re-pushed whenever the set changes.
+  // Load contributions (Supabase + localStorage cache) on mount. The
+  // resulting list flows to <Map /> as a prop, which keeps render order
+  // and timing under React's control rather than racing the dynamic
+  // import + map-load handshake on a fire-and-forget event bus.
   useEffect(() => {
     let cancelled = false;
     fetchAllContributions()
@@ -104,20 +106,6 @@ export default function Page() {
       cancelled = true;
     };
   }, []);
-
-  useEffect(() => {
-    mapBus.dispatch("contributions", {
-      items: contributions.map((c) => ({
-        id: c.id,
-        buildingName: c.buildingName,
-        longitude: c.longitude,
-        latitude: c.latitude,
-        gender: c.gender,
-        access: c.access,
-        status: c.status,
-      })),
-    });
-  }, [contributions]);
 
   const handleContributionSubmitted = useCallback((c: Contribution) => {
     setContributions((prev) => [...prev, c]);
@@ -347,6 +335,7 @@ export default function Page() {
               filters={filters}
               selectedId={selected?.building.id ?? null}
               onSelect={handleSelect}
+              contributions={contributions}
             />
           </MapErrorBoundary>
         }
