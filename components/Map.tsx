@@ -94,15 +94,15 @@ export default function Map({ filters, selectedId, onSelect }: Props) {
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
 
-    // Read the resolved theme straight from React state (not the ref) so the
-    // initial basemap URL can never drift from what <html> is painted with.
-    // Ref is then mirrored — the theme-change effect compares against it.
-    const initialTheme = theme;
-    themeRef.current = initialTheme;
+    // Always boot the basemap as light, regardless of the resolved theme.
+    // If the user's theme is dark, the theme-change effect below sees the
+    // ref/theme mismatch on its first run and performs the setStyle swap —
+    // a single codepath then owns every basemap transition.
+    themeRef.current = "light";
 
     const map = new maplibregl.Map({
       container: containerRef.current,
-      style: basemapUrlFor(initialTheme),
+      style: BASEMAP_LIGHT,
       center: [121.0685, 14.6537],
       zoom: 15.5,
       minZoom: 14,

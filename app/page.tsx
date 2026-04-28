@@ -16,6 +16,7 @@ import FilterChips from "@/components/search/FilterChips";
 import TitleCard from "@/components/legacy-overlay/TitleCard";
 import Legend from "@/components/legacy-overlay/Legend";
 import InfoPanel from "@/components/legacy-overlay/InfoPanel";
+import InfoPanelModal from "@/components/legacy-overlay/InfoPanelModal";
 import type { Selection } from "@/components/Map";
 import { centroidOfFeature, type LngLat } from "@/lib/geo/geoBounds";
 import { DEFAULT_FILTERS, type Filters } from "@/lib/filters";
@@ -334,6 +335,8 @@ export default function Page() {
           </div>
         }
       />
+
+      <InfoPanelModal open={aboutOpen} onClose={() => setAboutOpen(false)} />
 
       <PermissionExplainer
         open={explainerOpen}

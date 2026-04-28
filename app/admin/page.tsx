@@ -6,6 +6,7 @@ import {
   type BuildingPhoto,
   type PhotosByBuilding,
 } from "@/lib/photos/api";
+import { fetchOpenReports, type PhotoReport } from "@/lib/photos/reports";
 import { parseBuildingProps, type BuildingProps } from "@/lib/buildingFormat";
 
 const TOKEN_KEY = "upd-crt-admin-token";
@@ -16,13 +17,20 @@ type LoadState =
   | { kind: "ready"; photos: PhotosByBuilding }
   | { kind: "error"; message: string };
 
+type ReportsLoadState =
+  | { kind: "idle" }
+  | { kind: "loading" }
+  | { kind: "ready"; reports: readonly PhotoReport[] }
+  | { kind: "error"; message: string };
+
 type RowState = "idle" | "working";
-type FilterMode = "pending" | "all";
+type FilterMode = "pending" | "all" | "reports";
 
 export default function AdminPage() {
   const [token, setToken] = useState<string>("");
   const [tokenInput, setTokenInput] = useState<string>("");
   const [load, setLoad] = useState<LoadState>({ kind: "idle" });
+  const [reportsLoad, setReportsLoad] = useState<ReportsLoadState>({ kind: "idle" });
   const [rowState, setRowState] = useState<Record<string, RowState>>({});
   const [filter, setFilter] = useState<FilterMode>("pending");
   const [buildings, setBuildings] = useState<Map<number, BuildingProps>>(
@@ -58,7 +66,7 @@ export default function AdminPage() {
     };
   }, []);
 
-  const refresh = useCallback(async () => {
+  const refreshPhotos = useCallback(async () => {
     setLoad({ kind: "loading" });
     try {
       const photos = await fetchPhotosForReview();
@@ -68,10 +76,30 @@ export default function AdminPage() {
     }
   }, []);
 
+  const refreshReports = useCallback(async () => {
+    setReportsLoad({ kind: "loading" });
+    try {
+      const reports = await fetchOpenReports();
+      setReportsLoad({ kind: "ready", reports });
+    } catch (err) {
+      setReportsLoad({ kind: "error", message: messageOf(err) });
+    }
+  }, []);
+
+  // Pull a fresh snapshot of whichever tab the admin is viewing.
+  const refresh = useCallback(() => {
+    if (filter === "reports") refreshReports();
+    else refreshPhotos();
+  }, [filter, refreshPhotos, refreshReports]);
+
+  // Initial / token-change load: fetch both feeds so the header counts
+  // (e.g. "3 reports") stay accurate even before the admin clicks the
+  // Reports tab.
   useEffect(() => {
     if (!token) return;
-    refresh();
-  }, [token, refresh]);
+    refreshPhotos();
+    refreshReports();
+  }, [token, refreshPhotos, refreshReports]);
 
   const onSaveToken = (e: React.FormEvent) => {
     e.preventDefault();
@@ -90,6 +118,7 @@ export default function AdminPage() {
       window.localStorage.removeItem(TOKEN_KEY);
     }
     setLoad({ kind: "idle" });
+    setReportsLoad({ kind: "idle" });
   };
 
   const decide = useCallback(
@@ -127,16 +156,109 @@ export default function AdminPage() {
     [token],
   );
 
+  const retainReport = useCallback(
+    async (report: PhotoReport) => {
+      setRowState((s) => ({ ...s, [report.id]: "working" }));
+      try {
+        const res = await fetch(`/api/admin/reports/${report.id}`, {
+          method: "PATCH",
+          headers: {
+            "content-type": "application/json",
+            "x-admin-token": token,
+          },
+          body: JSON.stringify({ action: "retain" }),
+        });
+        if (!res.ok) {
+          const body = (await res.json().catch(() => ({}))) as { error?: string };
+          throw new Error(body.error || `HTTP ${res.status}`);
+        }
+        setReportsLoad((curr) =>
+          curr.kind === "ready"
+            ? {
+                kind: "ready",
+                reports: curr.reports.filter((r) => r.id !== report.id),
+              }
+            : curr,
+        );
+      } catch (err) {
+        alert(messageOf(err));
+      } finally {
+        setRowState((s) => {
+          const next = { ...s };
+          delete next[report.id];
+          return next;
+        });
+      }
+    },
+    [token],
+  );
+
+  // Deleting the photo cascades all reports tied to it (FK ON DELETE
+  // CASCADE), so the admin only needs to fire one request.
+  const deletePhotoFromReport = useCallback(
+    async (report: PhotoReport) => {
+      const photo = report.photo;
+      if (!confirm(`Delete this photo permanently?\n\n"${photo.description}"`)) {
+        return;
+      }
+      setRowState((s) => ({ ...s, [report.id]: "working" }));
+      try {
+        const res = await fetch(`/api/admin/photos/${photo.id}`, {
+          method: "PATCH",
+          headers: {
+            "content-type": "application/json",
+            "x-admin-token": token,
+          },
+          body: JSON.stringify({ action: "reject" }),
+        });
+        if (!res.ok) {
+          const body = (await res.json().catch(() => ({}))) as { error?: string };
+          throw new Error(body.error || `HTTP ${res.status}`);
+        }
+        // Drop every report tied to the deleted photo, not just this row.
+        setReportsLoad((curr) =>
+          curr.kind === "ready"
+            ? {
+                kind: "ready",
+                reports: curr.reports.filter((r) => r.photoId !== photo.id),
+              }
+            : curr,
+        );
+        // Also drop the photo from the photos feed if it's loaded there.
+        setLoad((curr) =>
+          curr.kind === "ready"
+            ? {
+                kind: "ready",
+                photos: applyDecision(curr.photos, photo, "reject"),
+              }
+            : curr,
+        );
+      } catch (err) {
+        alert(messageOf(err));
+      } finally {
+        setRowState((s) => {
+          const next = { ...s };
+          delete next[report.id];
+          return next;
+        });
+      }
+    },
+    [token],
+  );
+
   const totals = useMemo(() => {
-    if (load.kind !== "ready") return { pending: 0, approved: 0 };
     let pending = 0;
     let approved = 0;
-    for (const group of load.photos.values()) {
-      pending += group.pending.length;
-      approved += group.approved.length;
+    if (load.kind === "ready") {
+      for (const group of load.photos.values()) {
+        pending += group.pending.length;
+        approved += group.approved.length;
+      }
     }
-    return { pending, approved };
-  }, [load]);
+    const reports =
+      reportsLoad.kind === "ready" ? reportsLoad.reports.length : 0;
+    return { pending, approved, reports };
+  }, [load, reportsLoad]);
 
   if (!token) {
     return (
@@ -175,7 +297,7 @@ export default function AdminPage() {
         <div className="max-w-3xl mx-auto px-4 py-4 flex flex-wrap items-center gap-3">
           <h1 className="text-base font-bold tracking-tight">Photo review</h1>
           <span className="font-mono text-[10px] tracking-widest uppercase text-gray-500">
-            {totals.pending} pending · {totals.approved} approved
+            {totals.pending} pending · {totals.approved} approved · {totals.reports} reports
           </span>
           <div className="ml-auto flex items-center gap-2">
             <FilterToggle filter={filter} setFilter={setFilter} />
@@ -198,13 +320,23 @@ export default function AdminPage() {
       </header>
 
       <div className="max-w-3xl mx-auto px-4 py-5">
-        <Body
-          load={load}
-          buildings={buildings}
-          rowState={rowState}
-          decide={decide}
-          filter={filter}
-        />
+        {filter === "reports" ? (
+          <ReportsBody
+            load={reportsLoad}
+            buildings={buildings}
+            rowState={rowState}
+            onRetain={retainReport}
+            onDelete={deletePhotoFromReport}
+          />
+        ) : (
+          <Body
+            load={load}
+            buildings={buildings}
+            rowState={rowState}
+            decide={decide}
+            filter={filter}
+          />
+        )}
       </div>
     </main>
   );
@@ -226,12 +358,17 @@ function FilterToggle({
       <ToggleButton
         active={filter === "pending"}
         onClick={() => setFilter("pending")}
-        label="Pending only"
+        label="Pending"
       />
       <ToggleButton
         active={filter === "all"}
         onClick={() => setFilter("all")}
         label="All"
+      />
+      <ToggleButton
+        active={filter === "reports"}
+        onClick={() => setFilter("reports")}
+        label="Reports"
       />
     </div>
   );
@@ -495,6 +632,130 @@ function PhotoRow({
           </button>
         </div>
       )}
+    </li>
+  );
+}
+
+function ReportsBody({
+  load,
+  buildings,
+  rowState,
+  onRetain,
+  onDelete,
+}: {
+  load: ReportsLoadState;
+  buildings: Map<number, BuildingProps>;
+  rowState: Record<string, RowState>;
+  onRetain: (report: PhotoReport) => Promise<void>;
+  onDelete: (report: PhotoReport) => Promise<void>;
+}) {
+  if (load.kind === "idle" || load.kind === "loading") {
+    return (
+      <div className="text-center text-sm text-gray-500 py-12">Loading…</div>
+    );
+  }
+  if (load.kind === "error") {
+    return (
+      <div className="rounded-sm border border-maroon-300 bg-maroon-50 px-3 py-2 text-sm text-maroon-700">
+        {load.message}
+      </div>
+    );
+  }
+  if (load.reports.length === 0) {
+    return (
+      <div className="text-center py-16">
+        <div className="font-mono text-[10px] tracking-widest uppercase text-gray-500">
+          Inbox zero
+        </div>
+        <div className="mt-2 text-sm text-gray-700">
+          No open reports. New flags will appear here.
+        </div>
+      </div>
+    );
+  }
+  return (
+    <ul className="grid grid-cols-1 gap-4">
+      {load.reports.map((report) => (
+        <ReportRow
+          key={report.id}
+          report={report}
+          building={buildings.get(report.photo.buildingId) ?? null}
+          state={rowState[report.id] ?? "idle"}
+          onRetain={() => onRetain(report)}
+          onDelete={() => onDelete(report)}
+        />
+      ))}
+    </ul>
+  );
+}
+
+function ReportRow({
+  report,
+  building,
+  state,
+  onRetain,
+  onDelete,
+}: {
+  report: PhotoReport;
+  building: BuildingProps | null;
+  state: RowState;
+  onRetain: () => void;
+  onDelete: () => void;
+}) {
+  const reportedAgo = useMemo(
+    () => relativeTime(report.createdAt),
+    [report.createdAt],
+  );
+  const busy = state === "working";
+  const photo = report.photo;
+
+  return (
+    <li className="rounded-sm border border-gray-200 bg-paper overflow-hidden">
+      <img
+        src={photo.publicUrl}
+        alt={photo.description}
+        className="w-full max-h-[55vh] object-contain bg-gray-100"
+      />
+      <div className="px-4 py-3 border-b border-gray-200">
+        <div className="font-mono text-[9px] tracking-[0.2em] uppercase text-gray-500">
+          Building {photo.buildingId}
+          {building?.acronym ? <> · {building.acronym}</> : null}
+          {" · "}reported {reportedAgo}
+        </div>
+        <div className="mt-1 text-sm font-medium tracking-tight text-ink">
+          {building?.name ?? "Unknown building"}
+        </div>
+        <div className="mt-2 font-mono text-[10px] tracking-widest uppercase text-gray-500">
+          Photo description
+        </div>
+        <div className="text-sm text-ink leading-snug">{photo.description}</div>
+
+        <div className="mt-3 font-mono text-[10px] tracking-widest uppercase text-track-600">
+          User comment
+        </div>
+        <blockquote className="mt-1 text-sm text-ink leading-snug border-l-2 border-track-300 pl-3">
+          {report.comment}
+        </blockquote>
+      </div>
+
+      <div className="grid grid-cols-2 gap-2 p-3">
+        <button
+          type="button"
+          disabled={busy}
+          onClick={onRetain}
+          className="rounded-sm border border-gray-200 bg-paper hover:bg-maroon-50 hover:border-maroon-300 disabled:opacity-50 py-2.5 text-xs font-mono tracking-widest uppercase"
+        >
+          {busy ? "…" : "Retain photo"}
+        </button>
+        <button
+          type="button"
+          disabled={busy}
+          onClick={onDelete}
+          className="rounded-sm bg-maroon-500 hover:bg-maroon-600 disabled:bg-gray-300 text-white py-2.5 text-xs font-mono tracking-widest uppercase"
+        >
+          {busy ? "Deleting…" : "Delete photo"}
+        </button>
+      </div>
     </li>
   );
 }

@@ -9,6 +9,7 @@ import {
 import { distanceMeters, formatDistance } from "@/lib/geo/distance";
 import { mapBus } from "@/lib/mapBus";
 import BuildingPhotoPanel from "./BuildingPhoto";
+import ReportPhotoModal from "./ReportPhotoModal";
 
 type UserLocation = { lng: number; lat: number; accuracy: number } | null;
 
@@ -29,6 +30,7 @@ export default function BuildingDetail({
 }: Props) {
   const accent = bidetAccent(building);
   const [userLocation, setUserLocation] = useState<UserLocation>(null);
+  const [reportOpen, setReportOpen] = useState(false);
 
   // Subscribe to live user location dispatched by the Map's GeolocateControl.
   useEffect(() => {
@@ -57,16 +59,6 @@ export default function BuildingDetail({
       navigator.clipboard.writeText(window.location.href).catch(() => {});
     }
   };
-
-  const reportHref = useMemo(() => {
-    const subject = encodeURIComponent(
-      `[Hanap-Bidet] Report: ${building.acronym || building.name}`,
-    );
-    const body = encodeURIComponent(
-      `Building: ${building.name}\nAcronym: ${building.acronym}\nCurrent record: ${building.bidetRaw || "—"} / ${building.accessRaw || "—"}\n\nWhat's wrong / what to update:\n`,
-    );
-    return `mailto:hello@isaacenage.xyz?subject=${subject}&body=${body}`;
-  }, [building]);
 
   return (
     <div className="pt-1">
@@ -137,17 +129,25 @@ export default function BuildingDetail({
         >
           Share
         </button>
-        <a
-          href={reportHref}
-          className="grid place-items-center rounded-sm border border-gray-200 bg-paper hover:bg-maroon-50 hover:border-maroon-300 text-ink py-2.5 text-xs font-mono tracking-widest uppercase transition-colors min-h-[44px]"
+        <button
+          type="button"
+          onClick={() => setReportOpen(true)}
+          className="rounded-sm border border-gray-200 bg-paper hover:bg-maroon-50 hover:border-maroon-300 text-ink py-2.5 text-xs font-mono tracking-widest uppercase transition-colors min-h-[44px]"
         >
           Report
-        </a>
+        </button>
       </div>
 
       <BuildingPhotoPanel
         buildingId={building.id}
         buildingName={building.name}
+      />
+
+      <ReportPhotoModal
+        open={reportOpen}
+        buildingId={building.id}
+        buildingName={building.name}
+        onClose={() => setReportOpen(false)}
       />
     </div>
   );

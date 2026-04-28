@@ -202,19 +202,24 @@ function UploadForm({
     <div className="rounded-sm border border-gray-200 bg-paper p-3">
       <label
         htmlFor="photo-description"
-        className="font-mono text-[10px] tracking-widest uppercase text-gray-500"
+        className="font-mono text-[10px] tracking-widest uppercase text-maroon-700"
       >
-        Where in the building?
+        Step 1 · Where in the building? <span aria-hidden>*</span>
       </label>
+      <p className="mt-1 text-[11px] text-gray-600 leading-snug">
+        You must tell us the exact location <strong>before</strong> the camera unlocks. No location, no photo.
+      </p>
       <input
         id="photo-description"
         type="text"
         autoComplete="off"
+        required
+        aria-required="true"
         maxLength={DESCRIPTION_MAX + 40 /* let users see the over-limit warning */}
         placeholder="e.g. 2nd Floor Women's CR"
         value={description}
         onChange={(e) => setDescription(e.target.value)}
-        className="mt-1 w-full rounded-sm border border-gray-300 bg-paper px-3 py-2 text-sm text-ink placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-maroon-500"
+        className="mt-2 w-full rounded-sm border border-gray-300 bg-paper px-3 py-2 text-sm text-ink placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-maroon-500"
       />
       <div className="mt-1 flex items-center justify-between text-[10px] text-gray-500">
         <span>Required · shown publicly under the photo.</span>
@@ -249,10 +254,12 @@ function UploadForm({
           <circle cx="12" cy="13" r="4" />
         </svg>
         <span className="font-mono text-[10px] tracking-widest uppercase text-gray-500">
-          Take a photo
+          Step 2 · Take a photo
         </span>
         <span className="text-[11px] text-gray-400">
-          Camera only · awaits dev approval
+          {captionValid
+            ? "Camera only · awaits dev approval"
+            : "Locked — fill in the location above first"}
         </span>
       </button>
 

@@ -239,6 +239,14 @@ body {
   display: none !important;
 }
 
+/* Fade-in for full-screen overlays (e.g. InfoPanelModal). Kept brief so
+   it doesn't feel sluggish on a tap; prefers-reduced-motion neutralizes
+   it via the global rule below. */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
 /* prefers-reduced-motion: kill all animations + transitions globally. */
 @media (prefers-reduced-motion: reduce) {
   *,
