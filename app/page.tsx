@@ -78,6 +78,7 @@ export default function Page() {
   const [filters, setFilters] = useState<Filters>(DEFAULT_FILTERS);
   const [selected, setSelected] = useState<Selection | null>(null);
   const [snap, setSnap] = useState<SheetSnap>("peek");
+  const [aboutOpen, setAboutOpen] = useState(false);
   const dataset = useDataset();
 
   // Routing state
@@ -273,6 +274,7 @@ export default function Page() {
         totalCount={dataset.total}
         bidetCount={dataset.bidet}
         publicCount={dataset.public}
+        onOpenAbout={() => setAboutOpen(true)}
       />
     );
   }, [
@@ -319,11 +321,14 @@ export default function Page() {
             {sheetContent}
           </BottomSheet>
         }
+        infoPanel={
+          <InfoPanel open={aboutOpen} onOpenChange={setAboutOpen} />
+        }
         desktopSidebar={
           <div className="flex flex-col gap-3 pointer-events-auto">
             <TitleCard />
             <div className="self-start flex items-end gap-3">
-              <InfoPanel />
+              <InfoPanel open={aboutOpen} onOpenChange={setAboutOpen} />
               <Legend />
             </div>
           </div>

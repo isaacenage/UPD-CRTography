@@ -17,8 +17,13 @@ type Props = {
   chipSlot: ReactNode;
   // Phase 2+ renders <BottomSheet />; Phase 1 shows a peek-only placeholder.
   bottomSheet: ReactNode;
-  // Desktop ≥md only — original overlay cards (TitleCard / Legend / Info)
-  // rendered in a sidebar so power users keep the dense view.
+  // Floating "i" affordance — rendered above the map and beneath the
+  // bottom sheet so About stays reachable when the sheet's body is showing
+  // a building detail or directions. On desktop, the same panel renders
+  // inside `desktopSidebar` (so this slot is only painted on mobile).
+  infoPanel?: ReactNode;
+  // Desktop ≥md only — original overlay cards (TitleCard / InfoPanel /
+  // Legend) rendered in a sidebar so power users keep the dense view.
   desktopSidebar?: ReactNode;
 };
 
@@ -27,6 +32,7 @@ export default function AppShell({
   searchSlot,
   chipSlot,
   bottomSheet,
+  infoPanel,
   desktopSidebar,
 }: Props) {
   const isDesktop = useMediaQuery(MQ_DESKTOP);
@@ -43,6 +49,14 @@ export default function AppShell({
           flex child collapses on Firefox. */}
       <div className="relative flex-1 min-h-0">
         {map}
+        {!isDesktop && infoPanel ? (
+          <div
+            className="absolute top-3 left-3 z-20 pointer-events-none"
+            style={{ paddingLeft: "max(var(--safe-left), 0px)" }}
+          >
+            {infoPanel}
+          </div>
+        ) : null}
         <HomeFab />
         <LocateFab />
         {isDesktop && desktopSidebar ? (

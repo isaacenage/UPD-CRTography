@@ -23,6 +23,14 @@ export type RouteStep = Readonly<{
   durationSeconds: number;
 }>;
 
+export type ShortestVariant = Readonly<{
+  geometry: GeoJSON.LineString;
+  distanceMeters: number;
+  durationSeconds: number;
+  distanceLabel: string;
+  durationLabel: string;
+}>;
+
 export type RouteResult = Readonly<{
   geometry: GeoJSON.LineString;
   distanceMeters: number;
@@ -32,6 +40,10 @@ export type RouteResult = Readonly<{
   steps: readonly RouteStep[];
   profile: "driving" | "walking";
   fallback: boolean;
+  // Optional second route — restriction-free shortest road-following path
+  // (continue_straight=false, alternatives=true). Omitted when the second
+  // OSRM call fails or when its distance is within 1% of the legal route.
+  shortest?: ShortestVariant;
 }>;
 
 export type DirectionsService = {
@@ -151,6 +163,58 @@ function rawToResult(raw: RouteRaw): RouteResult | null {
   };
 }
 
+// Direct OSRM HTTP call bypassing the plugin so we can pass relaxed
+// params the plugin's configuration doesn't expose. Used to compute the
+// second "true shortest road-following" variant the user can compare
+// against the legal walking route.
+async function fetchShortestVariant(
+  apiBase: string,
+  from: LngLat,
+  to: LngLat,
+  signal?: AbortSignal,
+): Promise<ShortestVariant | null> {
+  const path = `walking/${from[0]},${from[1]};${to[0]},${to[1]}`;
+  const params = new URLSearchParams({
+    overview: "full",
+    geometries: "geojson",
+    steps: "false",
+    alternatives: "true",
+    continue_straight: "false",
+  });
+  const url = `${apiBase}/${path}?${params.toString()}`;
+  try {
+    const res = await fetch(url, { signal });
+    if (!res.ok) return null;
+    const json = (await res.json()) as { routes?: RouteRaw[] };
+    const shortest = pickShortestRoute(json.routes ?? []);
+    if (!shortest?.geometry || shortest.geometry.type !== "LineString") return null;
+    const distance = Number.isFinite(shortest.distance) ? Number(shortest.distance) : 0;
+    const duration = Number.isFinite(shortest.duration) ? Number(shortest.duration) : 0;
+    return {
+      geometry: shortest.geometry,
+      distanceMeters: distance,
+      durationSeconds: duration,
+      distanceLabel: formatDistance(distance),
+      durationLabel: formatDuration(duration),
+    };
+  } catch (err) {
+    if ((err as DOMException)?.name === "AbortError") throw err;
+    return null;
+  }
+}
+
+// True if the two routes are close enough that drawing both would be
+// visual noise — within 1 % distance and same coordinate count. The
+// shortest variant is dropped when this returns true.
+function shortestMatchesLegal(legal: RouteResult, shortest: ShortestVariant): boolean {
+  const sameCount =
+    legal.geometry.coordinates.length === shortest.geometry.coordinates.length;
+  if (!sameCount) return false;
+  const denom = Math.max(1, legal.distanceMeters);
+  const ratio = Math.abs(legal.distanceMeters - shortest.distanceMeters) / denom;
+  return ratio < 0.01;
+}
+
 // OSRM may return alternatives — pick the one with the smallest distance
 // so the user gets the literal shortest legal path, not the fastest.
 function pickShortestRoute(routes: ReadonlyArray<RouteRaw>): RouteRaw | null {
@@ -172,13 +236,13 @@ export async function createDirections(map: MapLibreMap): Promise<DirectionsServ
   let plugin: PluginInstance | null = null;
   let pluginErrored = false;
   let lastFetchedRoutes: RouteRaw[] | null = null;
+  const apiBase = process.env.NEXT_PUBLIC_OSRM_URL || DEFAULT_OSRM;
 
   // Lazy-load the plugin — keeps it out of the initial bundle so users
   // who never tap "Directions" don't pay for it.
   try {
     const mod = await import("@maplibre/maplibre-gl-directions");
     const Ctor = mod.default;
-    const apiBase = process.env.NEXT_PUBLIC_OSRM_URL || DEFAULT_OSRM;
     plugin = new Ctor(map, {
       api: apiBase,
       // Walking profile so the route follows pedestrian-accessible paths.
@@ -284,10 +348,56 @@ export async function createDirections(map: MapLibreMap): Promise<DirectionsServ
     if (map.getSource("fallback-route")) map.removeSource("fallback-route");
   }
 
+  // Second polyline for the restriction-free shortest variant. Drawn
+  // beneath the legal route (the user's primary read) using a dashed
+  // brand maroon so it's visually distinct without inventing a new color.
+  function drawShortest(geometry: GeoJSON.LineString): void {
+    const sourceId = "shortest-route";
+    const lineId = "shortest-route-line";
+    const casingId = "shortest-route-casing";
+    const data: GeoJSON.Feature<GeoJSON.LineString> = {
+      type: "Feature",
+      properties: {},
+      geometry,
+    };
+    if (map.getSource(sourceId)) {
+      (map.getSource(sourceId) as unknown as { setData(d: unknown): void }).setData(data);
+      return;
+    }
+    map.addSource(sourceId, { type: "geojson", data });
+    map.addLayer({
+      id: casingId,
+      type: "line",
+      source: sourceId,
+      paint: { "line-color": ROUTE_WHITE, "line-width": 7, "line-opacity": 0.9 },
+      layout: { "line-cap": "round", "line-join": "round" },
+    });
+    map.addLayer({
+      id: lineId,
+      type: "line",
+      source: sourceId,
+      paint: {
+        "line-color": "#7B1113",
+        "line-width": 4,
+        "line-opacity": 0.95,
+        "line-dasharray": [2, 1.5],
+      },
+      layout: { "line-cap": "round", "line-join": "round" },
+    });
+  }
+
+  function clearShortest(): void {
+    for (const id of ["shortest-route-line", "shortest-route-casing"]) {
+      if (map.getLayer(id)) map.removeLayer(id);
+    }
+    if (map.getSource("shortest-route")) map.removeSource("shortest-route");
+  }
+
   return {
     async requestRoute(from, to, signal) {
-      // Always wipe any previous fallback overlay first.
+      // Always wipe any previous overlays first.
       clearFallback();
+      clearShortest();
 
       if (plugin && !pluginErrored) {
         try {
@@ -317,7 +427,19 @@ export async function createDirections(map: MapLibreMap): Promise<DirectionsServ
             requestAnimationFrame(tick);
           });
 
-          if (result) return result;
+          if (result) {
+            // Fire the restriction-free shortest call after the legal route
+            // resolves. Sequential (not parallel with the plugin) because
+            // the plugin owns its own fetch and we don't want to compete
+            // for the public OSRM demo's rate limit. Failures are swallowed
+            // — legal route still ships.
+            const shortest = await fetchShortestVariant(apiBase, from, to, signal);
+            if (shortest && !shortestMatchesLegal(result, shortest)) {
+              drawShortest(shortest.geometry);
+              return { ...result, shortest };
+            }
+            return result;
+          }
         } catch (err) {
           if ((err as DOMException)?.name === "AbortError") {
             throw err;
@@ -338,6 +460,7 @@ export async function createDirections(map: MapLibreMap): Promise<DirectionsServ
         // noop
       }
       clearFallback();
+      clearShortest();
     },
 
     destroy() {
@@ -347,6 +470,7 @@ export async function createDirections(map: MapLibreMap): Promise<DirectionsServ
         // noop
       }
       clearFallback();
+      clearShortest();
       plugin = null;
     },
   };

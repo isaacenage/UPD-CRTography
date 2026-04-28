@@ -1,10 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import Link from "next/link";
 
-export default function InfoPanel() {
-  const [open, setOpen] = useState(false);
+type Props = {
+  open: boolean;
+  onOpenChange: (next: boolean) => void;
+};
 
+export default function InfoPanel({ open, onOpenChange }: Props) {
   return (
     <div className="pointer-events-auto">
       {open ? (
@@ -15,7 +18,7 @@ export default function InfoPanel() {
             </span>
             <button
               type="button"
-              onClick={() => setOpen(false)}
+              onClick={() => onOpenChange(false)}
               className="text-gray-500 hover:text-maroon-500 dark:hover:text-maroon-300 transition-colors text-lg leading-none w-6 h-6 flex items-center justify-center"
               aria-label="Close info panel"
             >
@@ -46,12 +49,26 @@ export default function InfoPanel() {
               </a>
               .
             </p>
+            <div className="flex gap-3 pt-1 border-t border-gray-100 text-[11px] font-mono tracking-widest uppercase">
+              <Link
+                href="/terms"
+                className="text-maroon-500 dark:text-maroon-300 hover:text-maroon-600 dark:hover:text-maroon-200 underline underline-offset-2"
+              >
+                Terms
+              </Link>
+              <Link
+                href="/privacy"
+                className="text-maroon-500 dark:text-maroon-300 hover:text-maroon-600 dark:hover:text-maroon-200 underline underline-offset-2"
+              >
+                Privacy
+              </Link>
+            </div>
           </div>
         </div>
       ) : (
         <button
           type="button"
-          onClick={() => setOpen(true)}
+          onClick={() => onOpenChange(true)}
           className="bg-paper/90 backdrop-blur-sm border border-gray-200 rounded-sm w-10 h-10 flex items-center justify-center text-ink font-bold text-base hover:bg-maroon-50 hover:border-maroon-300 transition-colors shadow-[0_6px_24px_-12px_rgb(26_26_26_/_0.25)]"
           aria-label="Open info panel"
         >

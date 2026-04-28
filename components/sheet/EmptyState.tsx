@@ -1,17 +1,23 @@
 "use client";
 
-import { useState } from "react";
+import Link from "next/link";
 import InstallPrompt from "@/components/pwa/InstallPrompt";
 
 type Props = {
   totalCount: number;
   bidetCount: number;
   publicCount: number;
+  // Opens the shared global About panel — single source of truth lives in
+  // the page so selecting a building no longer hides this entry point.
+  onOpenAbout?: () => void;
 };
 
-export default function EmptyState({ totalCount, bidetCount, publicCount }: Props) {
-  const [aboutOpen, setAboutOpen] = useState(false);
-
+export default function EmptyState({
+  totalCount,
+  bidetCount,
+  publicCount,
+  onOpenAbout,
+}: Props) {
   return (
     <div className="pt-1">
       <div className="font-mono text-[10px] tracking-widest uppercase text-maroon-600 dark:text-maroon-300 font-medium">
@@ -31,38 +37,32 @@ export default function EmptyState({ totalCount, bidetCount, publicCount }: Prop
         <Stat label="Public" value={publicCount} accent="gold" />
       </ul>
 
-      <button
-        type="button"
-        onClick={() => setAboutOpen((o) => !o)}
-        className="mt-3 text-xs font-mono tracking-widest uppercase text-maroon-600 dark:text-maroon-300 underline underline-offset-2 hover:text-maroon-700 dark:hover:text-maroon-200"
-        aria-expanded={aboutOpen}
-      >
-        {aboutOpen ? "Hide about" : "About this map"}
-      </button>
+      {onOpenAbout ? (
+        <button
+          type="button"
+          onClick={onOpenAbout}
+          className="mt-3 text-xs font-mono tracking-widest uppercase text-maroon-600 dark:text-maroon-300 underline underline-offset-2 hover:text-maroon-700 dark:hover:text-maroon-200"
+        >
+          About this map
+        </button>
+      ) : null}
 
       <InstallPrompt />
 
-      {aboutOpen ? (
-        <div className="mt-2 text-xs text-gray-700 leading-relaxed space-y-2 border-t border-gray-100 pt-3">
-          <p>
-            A guide to comfort rooms across UP Diliman, highlighting{" "}
-            <span className="font-medium text-ink">bidet availability</span>,
-            gender access, and accessibility for students, staff, and visitors.
-          </p>
-          <p className="text-[11px] text-gray-500">
-            Primary data:{" "}
-            <a
-              href="https://www.facebook.com/share/p/1HwxPg9ETt/"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-maroon-500 dark:text-maroon-300 hover:text-maroon-600 dark:hover:text-maroon-200 underline underline-offset-2"
-            >
-              Philippine Collegian
-            </a>
-            .
-          </p>
-        </div>
-      ) : null}
+      <div className="mt-4 pt-3 border-t border-gray-100 flex gap-3 text-[11px] font-mono tracking-widest uppercase">
+        <Link
+          href="/terms"
+          className="text-gray-500 hover:text-maroon-600 dark:hover:text-maroon-300 underline underline-offset-2"
+        >
+          Terms
+        </Link>
+        <Link
+          href="/privacy"
+          className="text-gray-500 hover:text-maroon-600 dark:hover:text-maroon-300 underline underline-offset-2"
+        >
+          Privacy
+        </Link>
+      </div>
     </div>
   );
 }

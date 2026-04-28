@@ -48,6 +48,22 @@ export default function DirectionsSheet({
         </div>
       ) : null}
 
+      {route.shortest ? (
+        <div className="mt-3 rounded-sm border border-maroon-300 bg-maroon-50 px-3 py-2">
+          <div className="flex items-center justify-between gap-3">
+            <span className="font-mono text-[10px] tracking-widest uppercase text-maroon-600 font-medium">
+              Shortest path
+            </span>
+            <span className="font-mono text-[10px] tracking-widest uppercase text-gray-700">
+              {route.shortest.distanceLabel} &middot; {route.shortest.durationLabel}
+            </span>
+          </div>
+          <p className="mt-1 text-[11px] text-gray-600 leading-relaxed">
+            Ignores one-way and U-turn restrictions. Shown as a dashed maroon line on the map.
+          </p>
+        </div>
+      ) : null}
+
       {!followMode ? (
         <button
           type="button"

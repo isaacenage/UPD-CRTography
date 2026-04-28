@@ -29,13 +29,16 @@ const COLOR_PAPER = COLOR.paper;
 const COLOR_MAROON_500 = COLOR.maroon500;
 const COLOR_FOREST_500 = COLOR.forest500;
 
-// OpenFreeMap exposes Positron (light) and a dark-themed sibling at
-// /styles/dark — same vector tile schema, different styling — so we can
-// swap the URL on theme change without touching our overlay layers.
-// (Note: the upstream OSM-tiles project's "dark-matter" id does NOT exist
-// on OpenFreeMap; using it 404s and leaves the canvas empty.)
+// OpenFreeMap publishes Positron, Bright, and Liberty — but its dark
+// sibling is unreliable (the previously-used /styles/dark either 404s or
+// returns an unstyled canvas, which is what was being misread as
+// "basemap initialized as dark"). For the dark variant we point at
+// CARTO's hosted dark-matter style, which is publicly available and uses
+// a compatible vector schema; the overlay layers we re-add post-setStyle
+// don't depend on basemap-specific source ids.
 const BASEMAP_LIGHT = "https://tiles.openfreemap.org/styles/positron";
-const BASEMAP_DARK = "https://tiles.openfreemap.org/styles/dark";
+const BASEMAP_DARK =
+  "https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json";
 
 function basemapUrlFor(theme: Theme): string {
   return theme === "dark" ? BASEMAP_DARK : BASEMAP_LIGHT;
@@ -91,9 +94,15 @@ export default function Map({ filters, selectedId, onSelect }: Props) {
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
 
+    // Read the resolved theme straight from React state (not the ref) so the
+    // initial basemap URL can never drift from what <html> is painted with.
+    // Ref is then mirrored — the theme-change effect compares against it.
+    const initialTheme = theme;
+    themeRef.current = initialTheme;
+
     const map = new maplibregl.Map({
       container: containerRef.current,
-      style: basemapUrlFor(themeRef.current),
+      style: basemapUrlFor(initialTheme),
       center: [121.0685, 14.6537],
       zoom: 15.5,
       minZoom: 14,
