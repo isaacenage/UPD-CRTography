@@ -22,7 +22,8 @@ import type {
 export const BUILDING_NAME_MIN = 2;
 export const BUILDING_NAME_MAX = 120;
 
-const TABLE = "up_user_contributions";
+export const CONTRIBUTIONS_TABLE = "up_user_contributions";
+const TABLE = CONTRIBUTIONS_TABLE;
 
 const SELECT_COLUMNS =
   "id, building_name, longitude, latitude, storage_path, gender, access, status, created_at";
@@ -170,9 +171,11 @@ export async function submitContribution(
   return fallback;
 }
 
-// Returns all contributions visible to the current visitor: server rows
-// (when the table exists) merged with anything still parked in
-// localStorage that the server hasn't acknowledged yet (deduped on id).
+// Returns the contributions the public map should render: approved
+// server rows (visible to all visitors) merged with the submitter's own
+// pending entries from localStorage so they see their pin immediately
+// while it's awaiting review. Rejected entries from anyone are filtered
+// out.
 export async function fetchAllContributions(): Promise<readonly Contribution[]> {
   const local = readLocalContributions();
 
@@ -182,6 +185,7 @@ export async function fetchAllContributions(): Promise<readonly Contribution[]> 
     const { data, error } = await sb
       .from(TABLE)
       .select(SELECT_COLUMNS)
+      .eq("status", "approved")
       .order("created_at", { ascending: true });
     if (!error && Array.isArray(data)) {
       server = (data as Row[]).map(rowToContribution);
@@ -192,6 +196,7 @@ export async function fetchAllContributions(): Promise<readonly Contribution[]> 
 
   const seen = new Set(server.map((c) => c.id));
   for (const c of local) {
+    if (c.status === "rejected") continue;
     if (!seen.has(c.id)) server.push(c);
   }
   return server;
@@ -199,4 +204,52 @@ export async function fetchAllContributions(): Promise<readonly Contribution[]> 
 
 function isFiniteCoord(n: number): boolean {
   return Number.isFinite(n);
+}
+
+// Admin surface helpers — separated from the public fetch path so the
+// /admin page can call a dedicated server endpoint that uses the service
+// role and is gated by ADMIN_TOKEN.
+
+export type AdminContributionList = Readonly<{
+  pending: readonly Contribution[];
+  approved: readonly Contribution[];
+}>;
+
+export async function fetchContributionsForReview(
+  adminToken: string,
+): Promise<AdminContributionList> {
+  const res = await fetch("/api/admin/contributions", {
+    headers: { "x-admin-token": adminToken },
+    cache: "no-store",
+  });
+  if (!res.ok) {
+    const body = (await res.json().catch(() => ({}))) as { error?: string };
+    throw new Error(body.error || `HTTP ${res.status}`);
+  }
+  const json = (await res.json()) as {
+    data: { pending: Row[]; approved: Row[] };
+  };
+  return {
+    pending: json.data.pending.map(rowToContribution),
+    approved: json.data.approved.map(rowToContribution),
+  };
+}
+
+export async function decideContribution(
+  id: string,
+  action: "approve" | "reject",
+  adminToken: string,
+): Promise<void> {
+  const res = await fetch(`/api/admin/contributions/${id}`, {
+    method: "PATCH",
+    headers: {
+      "content-type": "application/json",
+      "x-admin-token": adminToken,
+    },
+    body: JSON.stringify({ action }),
+  });
+  if (!res.ok) {
+    const body = (await res.json().catch(() => ({}))) as { error?: string };
+    throw new Error(body.error || `HTTP ${res.status}`);
+  }
 }

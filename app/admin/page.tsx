@@ -7,6 +7,12 @@ import {
   type PhotosByBuilding,
 } from "@/lib/photos/api";
 import { fetchOpenReports, type PhotoReport } from "@/lib/photos/reports";
+import {
+  decideContribution,
+  fetchContributionsForReview,
+  type AdminContributionList,
+} from "@/lib/contributions/api";
+import type { Contribution } from "@/lib/contributions/types";
 import { parseBuildingProps, type BuildingProps } from "@/lib/buildingFormat";
 
 const TOKEN_KEY = "upd-crt-admin-token";
@@ -23,14 +29,21 @@ type ReportsLoadState =
   | { kind: "ready"; reports: readonly PhotoReport[] }
   | { kind: "error"; message: string };
 
+type ContribLoadState =
+  | { kind: "idle" }
+  | { kind: "loading" }
+  | { kind: "ready"; list: AdminContributionList }
+  | { kind: "error"; message: string };
+
 type RowState = "idle" | "working";
-type FilterMode = "pending" | "all" | "reports";
+type FilterMode = "pending" | "all" | "reports" | "contributions";
 
 export default function AdminPage() {
   const [token, setToken] = useState<string>("");
   const [tokenInput, setTokenInput] = useState<string>("");
   const [load, setLoad] = useState<LoadState>({ kind: "idle" });
   const [reportsLoad, setReportsLoad] = useState<ReportsLoadState>({ kind: "idle" });
+  const [contribLoad, setContribLoad] = useState<ContribLoadState>({ kind: "idle" });
   const [rowState, setRowState] = useState<Record<string, RowState>>({});
   const [filter, setFilter] = useState<FilterMode>("pending");
   const [buildings, setBuildings] = useState<Map<number, BuildingProps>>(
@@ -86,20 +99,33 @@ export default function AdminPage() {
     }
   }, []);
 
+  const refreshContributions = useCallback(async () => {
+    if (!token) return;
+    setContribLoad({ kind: "loading" });
+    try {
+      const list = await fetchContributionsForReview(token);
+      setContribLoad({ kind: "ready", list });
+    } catch (err) {
+      setContribLoad({ kind: "error", message: messageOf(err) });
+    }
+  }, [token]);
+
   // Pull a fresh snapshot of whichever tab the admin is viewing.
   const refresh = useCallback(() => {
     if (filter === "reports") refreshReports();
+    else if (filter === "contributions") refreshContributions();
     else refreshPhotos();
-  }, [filter, refreshPhotos, refreshReports]);
+  }, [filter, refreshPhotos, refreshReports, refreshContributions]);
 
-  // Initial / token-change load: fetch both feeds so the header counts
-  // (e.g. "3 reports") stay accurate even before the admin clicks the
-  // Reports tab.
+  // Initial / token-change load: fetch every feed so the header counts
+  // (e.g. "3 reports · 2 contributions") stay accurate even before the
+  // admin clicks the corresponding tab.
   useEffect(() => {
     if (!token) return;
     refreshPhotos();
     refreshReports();
-  }, [token, refreshPhotos, refreshReports]);
+    refreshContributions();
+  }, [token, refreshPhotos, refreshReports, refreshContributions]);
 
   const onSaveToken = (e: React.FormEvent) => {
     e.preventDefault();
@@ -119,7 +145,49 @@ export default function AdminPage() {
     }
     setLoad({ kind: "idle" });
     setReportsLoad({ kind: "idle" });
+    setContribLoad({ kind: "idle" });
   };
+
+  const decideContrib = useCallback(
+    async (contribution: Contribution, action: "approve" | "reject") => {
+      setRowState((s) => ({ ...s, [contribution.id]: "working" }));
+      try {
+        await decideContribution(contribution.id, action, token);
+        setContribLoad((curr) => {
+          if (curr.kind !== "ready") return curr;
+          const list = curr.list;
+          if (action === "approve") {
+            return {
+              kind: "ready",
+              list: {
+                pending: list.pending.filter((c) => c.id !== contribution.id),
+                approved: [
+                  ...list.approved,
+                  { ...contribution, status: "approved" },
+                ],
+              },
+            };
+          }
+          return {
+            kind: "ready",
+            list: {
+              pending: list.pending.filter((c) => c.id !== contribution.id),
+              approved: list.approved.filter((c) => c.id !== contribution.id),
+            },
+          };
+        });
+      } catch (err) {
+        alert(messageOf(err));
+      } finally {
+        setRowState((s) => {
+          const next = { ...s };
+          delete next[contribution.id];
+          return next;
+        });
+      }
+    },
+    [token],
+  );
 
   const decide = useCallback(
     async (photo: BuildingPhoto, action: "approve" | "reject") => {
@@ -257,8 +325,10 @@ export default function AdminPage() {
     }
     const reports =
       reportsLoad.kind === "ready" ? reportsLoad.reports.length : 0;
-    return { pending, approved, reports };
-  }, [load, reportsLoad]);
+    const contribPending =
+      contribLoad.kind === "ready" ? contribLoad.list.pending.length : 0;
+    return { pending, approved, reports, contribPending };
+  }, [load, reportsLoad, contribLoad]);
 
   if (!token) {
     return (
@@ -297,7 +367,7 @@ export default function AdminPage() {
         <div className="max-w-3xl mx-auto px-4 py-4 flex flex-wrap items-center gap-3">
           <h1 className="text-base font-bold tracking-tight">Photo review</h1>
           <span className="font-mono text-[10px] tracking-widest uppercase text-gray-500">
-            {totals.pending} pending · {totals.approved} approved · {totals.reports} reports
+            {totals.pending} pending · {totals.approved} approved · {totals.reports} reports · {totals.contribPending} contributions
           </span>
           <div className="ml-auto flex items-center gap-2">
             <FilterToggle filter={filter} setFilter={setFilter} />
@@ -327,6 +397,12 @@ export default function AdminPage() {
             rowState={rowState}
             onRetain={retainReport}
             onDelete={deletePhotoFromReport}
+          />
+        ) : filter === "contributions" ? (
+          <ContributionsBody
+            load={contribLoad}
+            rowState={rowState}
+            decide={decideContrib}
           />
         ) : (
           <Body
@@ -369,6 +445,11 @@ function FilterToggle({
         active={filter === "reports"}
         onClick={() => setFilter("reports")}
         label="Reports"
+      />
+      <ToggleButton
+        active={filter === "contributions"}
+        onClick={() => setFilter("contributions")}
+        label="Contributions"
       />
     </div>
   );
@@ -757,6 +838,224 @@ function ReportRow({
         </button>
       </div>
     </li>
+  );
+}
+
+function ContributionsBody({
+  load,
+  rowState,
+  decide,
+}: {
+  load: ContribLoadState;
+  rowState: Record<string, RowState>;
+  decide: (c: Contribution, action: "approve" | "reject") => Promise<void>;
+}) {
+  if (load.kind === "idle" || load.kind === "loading") {
+    return (
+      <div className="text-center text-sm text-gray-500 py-12">Loading…</div>
+    );
+  }
+  if (load.kind === "error") {
+    return (
+      <div className="rounded-sm border border-maroon-300 bg-maroon-50 px-3 py-2 text-sm text-maroon-700">
+        {load.message}
+      </div>
+    );
+  }
+  const { pending, approved } = load.list;
+  if (pending.length === 0 && approved.length === 0) {
+    return (
+      <div className="text-center py-16">
+        <div className="font-mono text-[10px] tracking-widest uppercase text-gray-500">
+          Inbox zero
+        </div>
+        <div className="mt-2 text-sm text-gray-700">
+          No contributions yet. Anonymous submissions from the map's
+          Contribute button land here for review.
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      {pending.length > 0 ? (
+        <ContributionGroup
+          title="Pending review"
+          tone="pending"
+          contributions={pending}
+          rowState={rowState}
+          decide={decide}
+        />
+      ) : null}
+      {approved.length > 0 ? (
+        <ContributionGroup
+          title="Approved"
+          tone="approved"
+          contributions={approved}
+          rowState={rowState}
+          decide={decide}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+function ContributionGroup({
+  title,
+  tone,
+  contributions,
+  rowState,
+  decide,
+}: {
+  title: string;
+  tone: "pending" | "approved";
+  contributions: readonly Contribution[];
+  rowState: Record<string, RowState>;
+  decide: (c: Contribution, action: "approve" | "reject") => Promise<void>;
+}) {
+  const dot = tone === "pending" ? "bg-track-500" : "bg-forest-500";
+  return (
+    <section className="rounded-sm border border-gray-200 bg-paper">
+      <header className="px-4 py-3 border-b border-gray-200 flex items-center gap-2">
+        <span aria-hidden className={`w-1.5 h-1.5 rounded-full ${dot}`} />
+        <span className="font-mono text-[10px] tracking-widest uppercase text-gray-700">
+          {title} · {contributions.length}
+        </span>
+      </header>
+      <ul className="grid grid-cols-1 gap-3 px-4 py-4">
+        {contributions.map((c) => (
+          <ContributionRow
+            key={c.id}
+            contribution={c}
+            state={rowState[c.id] ?? "idle"}
+            isApproved={tone === "approved"}
+            onApprove={() => decide(c, "approve")}
+            onReject={() => decide(c, "reject")}
+          />
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+function ContributionRow({
+  contribution,
+  state,
+  isApproved,
+  onApprove,
+  onReject,
+}: {
+  contribution: Contribution;
+  state: RowState;
+  isApproved: boolean;
+  onApprove: () => void;
+  onReject: () => void;
+}) {
+  const submittedAgo = useMemo(
+    () => relativeTime(contribution.createdAt),
+    [contribution.createdAt],
+  );
+  const busy = state === "working";
+  const mapsHref = `https://www.google.com/maps/?q=${contribution.latitude},${contribution.longitude}`;
+
+  return (
+    <li className="rounded-sm border border-gray-200 bg-paper overflow-hidden">
+      {contribution.photoUrl ? (
+        <img
+          src={contribution.photoUrl}
+          alt={contribution.buildingName}
+          className="w-full max-h-[55vh] object-contain bg-gray-100"
+        />
+      ) : (
+        <div className="w-full aspect-[4/3] grid place-items-center bg-gray-100 text-xs font-mono uppercase tracking-widest text-gray-500">
+          No photo (storage upload skipped)
+        </div>
+      )}
+      <div className="px-4 py-3 border-b border-gray-200">
+        <div className="font-mono text-[9px] tracking-[0.2em] uppercase text-gray-500">
+          User contribution · submitted {submittedAgo}
+        </div>
+        <div className="mt-1 text-base font-bold tracking-tight text-ink">
+          {contribution.buildingName}
+        </div>
+        <dl className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 text-xs">
+          <Cell label="Gender" value={contribution.gender} />
+          <Cell label="Access" value={contribution.access} />
+          <Cell
+            label="Latitude"
+            value={contribution.latitude.toFixed(6)}
+            mono
+          />
+          <Cell
+            label="Longitude"
+            value={contribution.longitude.toFixed(6)}
+            mono
+          />
+        </dl>
+        <a
+          href={mapsHref}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="mt-2 inline-block font-mono text-[10px] tracking-widest uppercase text-maroon-600 underline underline-offset-4 hover:text-maroon-700"
+        >
+          Open in Google Maps ↗
+        </a>
+      </div>
+
+      {isApproved ? (
+        <div className="p-3">
+          <button
+            type="button"
+            disabled={busy}
+            onClick={onReject}
+            className="w-full rounded-sm border border-maroon-200 bg-paper hover:bg-maroon-50 hover:border-maroon-300 text-maroon-700 disabled:opacity-50 py-2.5 text-xs font-mono tracking-widest uppercase"
+          >
+            {busy ? "Removing…" : "Remove approved contribution"}
+          </button>
+        </div>
+      ) : (
+        <div className="grid grid-cols-2 gap-2 p-3">
+          <button
+            type="button"
+            disabled={busy}
+            onClick={onReject}
+            className="rounded-sm border border-gray-200 bg-paper hover:bg-maroon-50 hover:border-maroon-300 disabled:opacity-50 py-2.5 text-xs font-mono tracking-widest uppercase"
+          >
+            {busy ? "…" : "Reject"}
+          </button>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={onApprove}
+            className="rounded-sm bg-forest-500 hover:bg-forest-600 disabled:bg-gray-300 text-white py-2.5 text-xs font-mono tracking-widest uppercase"
+          >
+            {busy ? "Working…" : "Approve"}
+          </button>
+        </div>
+      )}
+    </li>
+  );
+}
+
+function Cell({
+  label,
+  value,
+  mono,
+}: {
+  label: string;
+  value: string;
+  mono?: boolean;
+}) {
+  return (
+    <div>
+      <dt className="font-mono text-[9px] tracking-widest uppercase text-gray-500">
+        {label}
+      </dt>
+      <dd className={`mt-0.5 ${mono ? "font-mono text-[11px]" : "text-sm"} text-ink`}>
+        {value}
+      </dd>
+    </div>
   );
 }
 

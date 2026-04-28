@@ -380,7 +380,14 @@ export default function Page() {
         }
       />
 
-      <InfoPanelModal open={aboutOpen} onClose={() => setAboutOpen(false)} />
+      <InfoPanelModal
+        open={aboutOpen}
+        onClose={() => setAboutOpen(false)}
+        onContribute={() => {
+          setAboutOpen(false);
+          setContributeOpen(true);
+        }}
+      />
 
       <ContributeModal
         open={contributeOpen}

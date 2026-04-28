@@ -6,6 +6,9 @@ import Link from "next/link";
 type Props = {
   open: boolean;
   onClose: () => void;
+  // Optional — when provided, the About panel surfaces a contribute CTA
+  // so users discover the flow without having to spot the left-side FAB.
+  onContribute?: () => void;
 };
 
 // Full-screen "About this map" overlay. Translucent backdrop (white in
@@ -13,7 +16,7 @@ type Props = {
 // borders, just typography on a blurred surface. An X button in the
 // top-right and Esc both close it. Clicking the backdrop also closes,
 // since there's no other interactive surface beneath the text.
-export default function InfoPanelModal({ open, onClose }: Props) {
+export default function InfoPanelModal({ open, onClose, onContribute }: Props) {
   // Esc to close.
   useEffect(() => {
     if (!open) return;
@@ -122,8 +125,54 @@ export default function InfoPanelModal({ open, onClose }: Props) {
             >
               Philippine Collegian
             </a>
-            .
+            . The map is open source and depends on community input —
+            students, faculty, and staff who notice missing or outdated
+            entries are encouraged to contribute.
           </p>
+
+          {onContribute ? (
+            <div className="pt-2">
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onContribute();
+                }}
+                className="w-full text-left rounded-sm border border-current/40 hover:bg-current/5 transition-colors p-4 sm:p-5 flex items-start gap-3 group"
+              >
+                <span
+                  aria-hidden
+                  className="shrink-0 mt-0.5 w-9 h-9 rounded-full border-2 border-current/60 grid place-items-center group-hover:border-current transition-colors"
+                >
+                  <svg
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth={1.8}
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    className="w-4 h-4"
+                  >
+                    <path d="M12 5v14" />
+                    <path d="M5 12h14" />
+                  </svg>
+                </span>
+                <span className="min-w-0">
+                  <span className="block font-mono text-[10px] tracking-[0.25em] uppercase opacity-70">
+                    Contribute
+                  </span>
+                  <span className="block mt-1 text-base sm:text-lg font-light leading-snug">
+                    Found a building with a bidet that's not included in this
+                    map?
+                  </span>
+                  <span className="block mt-1 text-[12px] opacity-70">
+                    Tap to add it. Submissions are anonymous and reviewed
+                    before they're folded into the official dataset.
+                  </span>
+                </span>
+              </button>
+            </div>
+          ) : null}
 
           <div className="flex gap-6 pt-2 font-mono text-[11px] tracking-[0.2em] uppercase opacity-80">
             <Link
