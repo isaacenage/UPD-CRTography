@@ -36,36 +36,8 @@ export async function PATCH(req: Request, { params }: Params) {
   const sb = getServiceSupabase();
 
   if (action === "approve") {
-    // Block approving when another approved photo already exists for the
-    // same building. Without this, the partial unique index would 23505
-    // and we'd return a generic Postgres error.
-    const target = await sb
-      .from("up_building_photos")
-      .select("id, building_id, status")
-      .eq("id", id)
-      .maybeSingle();
-    if (target.error) {
-      return NextResponse.json({ error: target.error.message }, { status: 500 });
-    }
-    if (!target.data) {
-      return NextResponse.json({ error: "Photo not found" }, { status: 404 });
-    }
-    const existing = await sb
-      .from("up_building_photos")
-      .select("id")
-      .eq("building_id", target.data.building_id)
-      .eq("status", "approved")
-      .neq("id", id)
-      .limit(1);
-    if (existing.error) {
-      return NextResponse.json({ error: existing.error.message }, { status: 500 });
-    }
-    if (existing.data && existing.data.length > 0) {
-      return NextResponse.json(
-        { error: "This building already has an approved photo." },
-        { status: 409 },
-      );
-    }
+    // Buildings can host many approved photos (one per CR / location).
+    // The DB no longer caps approvals — just flip status + stamp time.
     const { data, error } = await sb
       .from("up_building_photos")
       .update({ status: "approved", approved_at: new Date().toISOString() })
@@ -73,12 +45,15 @@ export async function PATCH(req: Request, { params }: Params) {
       .select("id, building_id, storage_path, status, approved_at")
       .single();
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 });
+      // PGRST116 = no rows matched the filter.
+      const status = error.code === "PGRST116" ? 404 : 500;
+      return NextResponse.json({ error: error.message }, { status });
     }
     return NextResponse.json({ data });
   }
 
-  // reject: drop the row + remove the storage object.
+  // reject (used for both pending rejections and removing a previously
+  // approved photo): drop the row + remove the storage object.
   const target = await sb
     .from("up_building_photos")
     .select("id, storage_path")

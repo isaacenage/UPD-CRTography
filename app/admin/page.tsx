@@ -1,7 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { fetchPendingPhotos, type BuildingPhoto } from "@/lib/photos/api";
+import {
+  fetchPhotosForReview,
+  type BuildingPhoto,
+  type PhotosByBuilding,
+} from "@/lib/photos/api";
 import { parseBuildingProps, type BuildingProps } from "@/lib/buildingFormat";
 
 const TOKEN_KEY = "upd-crt-admin-token";
@@ -9,21 +13,22 @@ const TOKEN_KEY = "upd-crt-admin-token";
 type LoadState =
   | { kind: "idle" }
   | { kind: "loading" }
-  | { kind: "ready"; photos: readonly BuildingPhoto[] }
+  | { kind: "ready"; photos: PhotosByBuilding }
   | { kind: "error"; message: string };
 
-type RowState = "idle" | "working" | "done";
+type RowState = "idle" | "working";
+type FilterMode = "pending" | "all";
 
 export default function AdminPage() {
   const [token, setToken] = useState<string>("");
   const [tokenInput, setTokenInput] = useState<string>("");
   const [load, setLoad] = useState<LoadState>({ kind: "idle" });
   const [rowState, setRowState] = useState<Record<string, RowState>>({});
+  const [filter, setFilter] = useState<FilterMode>("pending");
   const [buildings, setBuildings] = useState<Map<number, BuildingProps>>(
     () => new Map(),
   );
 
-  // Restore token on mount.
   useEffect(() => {
     if (typeof window === "undefined") return;
     const saved = window.localStorage.getItem(TOKEN_KEY) ?? "";
@@ -33,7 +38,7 @@ export default function AdminPage() {
     }
   }, []);
 
-  // Load building names so the admin sees what each photo is *for*.
+  // Building names so each section can be labeled with what it represents.
   useEffect(() => {
     let cancelled = false;
     fetch("/data/up-buildings.geojson")
@@ -56,7 +61,7 @@ export default function AdminPage() {
   const refresh = useCallback(async () => {
     setLoad({ kind: "loading" });
     try {
-      const photos = await fetchPendingPhotos();
+      const photos = await fetchPhotosForReview();
       setLoad({ kind: "ready", photos });
     } catch (err) {
       setLoad({ kind: "error", message: messageOf(err) });
@@ -103,23 +108,35 @@ export default function AdminPage() {
           const body = (await res.json().catch(() => ({}))) as { error?: string };
           throw new Error(body.error || `HTTP ${res.status}`);
         }
-        setRowState((s) => ({ ...s, [photo.id]: "done" }));
-        // Drop the row from the visible list immediately.
+        // Apply the change locally instead of refetching the whole list.
         setLoad((curr) =>
           curr.kind === "ready"
-            ? {
-                kind: "ready",
-                photos: curr.photos.filter((p) => p.id !== photo.id),
-              }
+            ? { kind: "ready", photos: applyDecision(curr.photos, photo, action) }
             : curr,
         );
       } catch (err) {
-        setRowState((s) => ({ ...s, [photo.id]: "idle" }));
         alert(messageOf(err));
+      } finally {
+        setRowState((s) => {
+          const next = { ...s };
+          delete next[photo.id];
+          return next;
+        });
       }
     },
     [token],
   );
+
+  const totals = useMemo(() => {
+    if (load.kind !== "ready") return { pending: 0, approved: 0 };
+    let pending = 0;
+    let approved = 0;
+    for (const group of load.photos.values()) {
+      pending += group.pending.length;
+      approved += group.approved.length;
+    }
+    return { pending, approved };
+  }, [load]);
 
   if (!token) {
     return (
@@ -155,12 +172,13 @@ export default function AdminPage() {
   return (
     <main className="min-h-[100svh] bg-paper text-ink">
       <header className="border-b border-gray-200 bg-paper sticky top-0 z-10">
-        <div className="max-w-3xl mx-auto px-4 py-4 flex items-center gap-3">
+        <div className="max-w-3xl mx-auto px-4 py-4 flex flex-wrap items-center gap-3">
           <h1 className="text-base font-bold tracking-tight">Photo review</h1>
           <span className="font-mono text-[10px] tracking-widest uppercase text-gray-500">
-            Pending submissions
+            {totals.pending} pending · {totals.approved} approved
           </span>
           <div className="ml-auto flex items-center gap-2">
+            <FilterToggle filter={filter} setFilter={setFilter} />
             <button
               type="button"
               onClick={refresh}
@@ -180,9 +198,68 @@ export default function AdminPage() {
       </header>
 
       <div className="max-w-3xl mx-auto px-4 py-5">
-        <Body load={load} buildings={buildings} rowState={rowState} decide={decide} />
+        <Body
+          load={load}
+          buildings={buildings}
+          rowState={rowState}
+          decide={decide}
+          filter={filter}
+        />
       </div>
     </main>
+  );
+}
+
+function FilterToggle({
+  filter,
+  setFilter,
+}: {
+  filter: FilterMode;
+  setFilter: (f: FilterMode) => void;
+}) {
+  return (
+    <div
+      role="tablist"
+      aria-label="View"
+      className="inline-flex rounded-sm border border-gray-200 overflow-hidden"
+    >
+      <ToggleButton
+        active={filter === "pending"}
+        onClick={() => setFilter("pending")}
+        label="Pending only"
+      />
+      <ToggleButton
+        active={filter === "all"}
+        onClick={() => setFilter("all")}
+        label="All"
+      />
+    </div>
+  );
+}
+
+function ToggleButton({
+  active,
+  onClick,
+  label,
+}: {
+  active: boolean;
+  onClick: () => void;
+  label: string;
+}) {
+  return (
+    <button
+      type="button"
+      role="tab"
+      aria-selected={active}
+      onClick={onClick}
+      className={`px-3 py-1.5 text-xs font-mono tracking-widest uppercase transition-colors ${
+        active
+          ? "bg-maroon-500 text-white"
+          : "bg-paper text-ink hover:bg-maroon-50"
+      }`}
+    >
+      {label}
+    </button>
   );
 }
 
@@ -191,11 +268,13 @@ function Body({
   buildings,
   rowState,
   decide,
+  filter,
 }: {
   load: LoadState;
   buildings: Map<number, BuildingProps>;
   rowState: Record<string, RowState>;
   decide: (photo: BuildingPhoto, action: "approve" | "reject") => Promise<void>;
+  filter: FilterMode;
 }) {
   if (load.kind === "idle" || load.kind === "loading") {
     return (
@@ -209,87 +288,246 @@ function Body({
       </div>
     );
   }
-  if (load.photos.length === 0) {
+
+  const visible: Array<{
+    buildingId: number;
+    approved: readonly BuildingPhoto[];
+    pending: readonly BuildingPhoto[];
+  }> = [];
+  for (const [buildingId, group] of load.photos) {
+    if (filter === "pending" && group.pending.length === 0) continue;
+    visible.push({ buildingId, ...group });
+  }
+
+  if (visible.length === 0) {
     return (
       <div className="text-center py-16">
         <div className="font-mono text-[10px] tracking-widest uppercase text-gray-500">
-          Inbox zero
+          {filter === "pending" ? "Inbox zero" : "Nothing to show"}
         </div>
         <div className="mt-2 text-sm text-gray-700">
-          No pending photos. New submissions will appear here.
+          {filter === "pending"
+            ? "No pending photos. New submissions will appear here."
+            : "No photos have been submitted yet."}
         </div>
       </div>
     );
   }
+
   return (
-    <ul className="grid grid-cols-1 gap-4">
-      {load.photos.map((p) => (
-        <PhotoRow
-          key={p.id}
-          photo={p}
-          building={buildings.get(p.buildingId) ?? null}
-          state={rowState[p.id] ?? "idle"}
-          onApprove={() => decide(p, "approve")}
-          onReject={() => decide(p, "reject")}
+    <div className="grid grid-cols-1 gap-6">
+      {visible.map((group) => (
+        <BuildingSection
+          key={group.buildingId}
+          buildingId={group.buildingId}
+          building={buildings.get(group.buildingId) ?? null}
+          approved={group.approved}
+          pending={group.pending}
+          rowState={rowState}
+          decide={decide}
+          filter={filter}
         />
       ))}
-    </ul>
+    </div>
+  );
+}
+
+function BuildingSection({
+  buildingId,
+  building,
+  approved,
+  pending,
+  rowState,
+  decide,
+  filter,
+}: {
+  buildingId: number;
+  building: BuildingProps | null;
+  approved: readonly BuildingPhoto[];
+  pending: readonly BuildingPhoto[];
+  rowState: Record<string, RowState>;
+  decide: (photo: BuildingPhoto, action: "approve" | "reject") => Promise<void>;
+  filter: FilterMode;
+}) {
+  return (
+    <section className="rounded-sm border border-gray-200 bg-paper">
+      <header className="px-4 py-3 border-b border-gray-200">
+        <div className="font-mono text-[9px] tracking-[0.2em] uppercase text-gray-500">
+          Building {buildingId}
+          {building?.acronym ? <> · {building.acronym}</> : null}
+        </div>
+        <h2 className="mt-1 text-base font-bold tracking-tight">
+          {building?.name ?? "Unknown building"}
+        </h2>
+        <div className="mt-1 font-mono text-[10px] tracking-widest uppercase text-gray-500">
+          {pending.length} pending · {approved.length} approved
+        </div>
+      </header>
+
+      {pending.length > 0 ? (
+        <PhotoGroup
+          title="Pending review"
+          tone="pending"
+          photos={pending}
+          rowState={rowState}
+          decide={decide}
+          isApproved={false}
+        />
+      ) : null}
+
+      {filter === "all" && approved.length > 0 ? (
+        <PhotoGroup
+          title="Approved"
+          tone="approved"
+          photos={approved}
+          rowState={rowState}
+          decide={decide}
+          isApproved={true}
+        />
+      ) : null}
+    </section>
+  );
+}
+
+function PhotoGroup({
+  title,
+  tone,
+  photos,
+  rowState,
+  decide,
+  isApproved,
+}: {
+  title: string;
+  tone: "pending" | "approved";
+  photos: readonly BuildingPhoto[];
+  rowState: Record<string, RowState>;
+  decide: (photo: BuildingPhoto, action: "approve" | "reject") => Promise<void>;
+  isApproved: boolean;
+}) {
+  const dotColor =
+    tone === "pending" ? "bg-track-500" : "bg-forest-500";
+  return (
+    <div className="border-b border-gray-200 last:border-b-0">
+      <div className="px-4 py-2 flex items-center gap-2">
+        <span aria-hidden className={`w-1.5 h-1.5 rounded-full ${dotColor}`} />
+        <span className="font-mono text-[10px] tracking-widest uppercase text-gray-700">
+          {title} · {photos.length}
+        </span>
+      </div>
+      <ul className="grid grid-cols-1 gap-3 px-4 pb-4">
+        {photos.map((p) => (
+          <PhotoRow
+            key={p.id}
+            photo={p}
+            state={rowState[p.id] ?? "idle"}
+            isApproved={isApproved}
+            onApprove={() => decide(p, "approve")}
+            onReject={() => decide(p, "reject")}
+          />
+        ))}
+      </ul>
+    </div>
   );
 }
 
 function PhotoRow({
   photo,
-  building,
   state,
+  isApproved,
   onApprove,
   onReject,
 }: {
   photo: BuildingPhoto;
-  building: BuildingProps | null;
   state: RowState;
+  isApproved: boolean;
   onApprove: () => void;
   onReject: () => void;
 }) {
   const submittedAgo = useMemo(() => relativeTime(photo.createdAt), [photo.createdAt]);
   const busy = state === "working";
+
   return (
     <li className="rounded-sm border border-gray-200 bg-paper overflow-hidden">
       <img
         src={photo.publicUrl}
-        alt={building?.name ?? `Building ${photo.buildingId}`}
+        alt={photo.description}
         className="w-full max-h-[60vh] object-contain bg-gray-100"
       />
       <div className="px-4 py-3">
-        <div className="font-mono text-[9px] tracking-[0.2em] uppercase text-gray-500">
-          Building {photo.buildingId}
-          {building?.acronym ? <> · {building.acronym}</> : null}
-          {" · "}
-          {submittedAgo}
+        <div className="text-sm font-medium text-ink leading-snug">
+          {photo.description}
         </div>
-        <div className="mt-1 text-sm font-bold tracking-tight">
-          {building?.name ?? "Unknown building"}
+        <div className="mt-1 font-mono text-[9px] tracking-[0.2em] uppercase text-gray-500">
+          submitted {submittedAgo}
+          {photo.approvedAt
+            ? ` · approved ${relativeTime(photo.approvedAt)}`
+            : null}
         </div>
       </div>
-      <div className="grid grid-cols-2 gap-2 p-3 border-t border-gray-200">
-        <button
-          type="button"
-          disabled={busy}
-          onClick={onReject}
-          className="rounded-sm border border-gray-200 bg-paper hover:bg-maroon-50 hover:border-maroon-300 disabled:opacity-50 py-2.5 text-xs font-mono tracking-widest uppercase"
-        >
-          {busy ? "…" : "Reject"}
-        </button>
-        <button
-          type="button"
-          disabled={busy}
-          onClick={onApprove}
-          className="rounded-sm bg-forest-500 hover:bg-forest-600 disabled:bg-gray-300 text-white py-2.5 text-xs font-mono tracking-widest uppercase"
-        >
-          {busy ? "Working…" : "Approve"}
-        </button>
-      </div>
+      {isApproved ? (
+        <div className="p-3 border-t border-gray-200">
+          <button
+            type="button"
+            disabled={busy}
+            onClick={onReject}
+            className="w-full rounded-sm border border-maroon-200 bg-paper hover:bg-maroon-50 hover:border-maroon-300 text-maroon-700 disabled:opacity-50 py-2.5 text-xs font-mono tracking-widest uppercase"
+          >
+            {busy ? "Removing…" : "Remove approved photo"}
+          </button>
+        </div>
+      ) : (
+        <div className="grid grid-cols-2 gap-2 p-3 border-t border-gray-200">
+          <button
+            type="button"
+            disabled={busy}
+            onClick={onReject}
+            className="rounded-sm border border-gray-200 bg-paper hover:bg-maroon-50 hover:border-maroon-300 disabled:opacity-50 py-2.5 text-xs font-mono tracking-widest uppercase"
+          >
+            {busy ? "…" : "Reject"}
+          </button>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={onApprove}
+            className="rounded-sm bg-forest-500 hover:bg-forest-600 disabled:bg-gray-300 text-white py-2.5 text-xs font-mono tracking-widest uppercase"
+          >
+            {busy ? "Working…" : "Approve"}
+          </button>
+        </div>
+      )}
     </li>
   );
+}
+
+function applyDecision(
+  current: PhotosByBuilding,
+  photo: BuildingPhoto,
+  action: "approve" | "reject",
+): PhotosByBuilding {
+  // Immutable update — clone the affected building's group, leave the
+  // rest of the map alone. The Map is replaced wholesale so React sees
+  // a new reference.
+  const next = new Map(current);
+  const group = next.get(photo.buildingId);
+  if (!group) return current;
+
+  if (action === "approve") {
+    const pending = group.pending.filter((p) => p.id !== photo.id);
+    const approved = [
+      ...group.approved,
+      { ...photo, status: "approved" as const, approvedAt: new Date().toISOString() },
+    ];
+    next.set(photo.buildingId, { approved, pending });
+  } else {
+    const pending = group.pending.filter((p) => p.id !== photo.id);
+    const approved = group.approved.filter((p) => p.id !== photo.id);
+    if (pending.length === 0 && approved.length === 0) {
+      next.delete(photo.buildingId);
+    } else {
+      next.set(photo.buildingId, { approved, pending });
+    }
+  }
+  return next;
 }
 
 function relativeTime(iso: string): string {
