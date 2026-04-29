@@ -17,7 +17,6 @@ import { toMaplibreFilter, applies, type Filters } from "@/lib/filters";
 import type { DirectionsService } from "@/lib/directions";
 import { log } from "@/lib/log";
 import { COLOR } from "@/lib/theme";
-import { useTheme, type Theme } from "@/lib/theme/context";
 import type { Contribution } from "@/lib/contributions/types";
 
 const SOURCE_ID = "up-buildings";
@@ -38,20 +37,12 @@ const COLOR_PAPER = COLOR.paper;
 const COLOR_MAROON_500 = COLOR.maroon500;
 const COLOR_FOREST_500 = COLOR.forest500;
 
-// OpenFreeMap publishes Positron, Bright, and Liberty — but its dark
-// sibling is unreliable (the previously-used /styles/dark either 404s or
-// returns an unstyled canvas, which is what was being misread as
-// "basemap initialized as dark"). For the dark variant we point at
-// CARTO's hosted dark-matter style, which is publicly available and uses
-// a compatible vector schema; the overlay layers we re-add post-setStyle
-// don't depend on basemap-specific source ids.
-const BASEMAP_LIGHT = "https://tiles.openfreemap.org/styles/positron";
-const BASEMAP_DARK =
-  "https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json";
-
-function basemapUrlFor(theme: Theme): string {
-  return theme === "dark" ? BASEMAP_DARK : BASEMAP_LIGHT;
-}
+// Single basemap for both themes. Earlier we toggled to a CARTO dark-matter
+// style on dark mode, but the swap raced React's post-hydration theme
+// reconciliation: a light-mode UI could mount with a stale dark boot theme
+// and paint the dark basemap underneath the light surface. Pinning to
+// Positron in both themes removes the race entirely.
+const BASEMAP_URL = "https://tiles.openfreemap.org/styles/positron";
 
 export type Selection = Readonly<{
   building: BuildingProps;
@@ -104,19 +95,10 @@ function prefersReducedMotion(): boolean {
 }
 
 export default function Map({ filters, selectedId, onSelect, contributions }: Props) {
-  const { theme } = useTheme();
-  const themeRef = useRef<Theme>(theme);
-  // Capture the boot theme synchronously so the mount effect uses the
-  // value at the moment of mount, not a stale closure if React batches
-  // the first render with a theme update.
-  const bootThemeRef = useRef<Theme>(theme);
-  bootThemeRef.current = theme;
-
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
   const overlayReadyRef = useRef(false);
   const applyFilterRef = useRef<(() => void) | null>(null);
-  const reAddOverlaysRef = useRef<(() => void) | null>(null);
   const directionsServiceRef = useRef<DirectionsService | null>(null);
   const directionsLoadingRef = useRef(false);
   const routeAbortRef = useRef<AbortController | null>(null);
@@ -148,16 +130,9 @@ export default function Map({ filters, selectedId, onSelect, contributions }: Pr
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
 
-    // Boot the basemap with the resolved theme so the initial paint matches
-    // the UI (no flash, no swap-on-mount). The theme-change effect below
-    // returns early on first run because themeRef and theme already match;
-    // it only fires on subsequent toggles.
-    const bootTheme = bootThemeRef.current;
-    themeRef.current = bootTheme;
-
     const map = new maplibregl.Map({
       container: containerRef.current,
-      style: basemapUrlFor(bootTheme),
+      style: BASEMAP_URL,
       center: [121.0685, 14.6537],
       zoom: 15.5,
       minZoom: 14,
@@ -356,9 +331,7 @@ export default function Map({ filters, selectedId, onSelect, contributions }: Pr
           type: "line",
           source: SOURCE_ID,
           paint: {
-            // Outline color flips with the theme so building edges stay
-            // legible on the dark basemap.
-            "line-color": themeRef.current === "dark" ? COLOR_PAPER : COLOR_INK,
+            "line-color": COLOR_INK,
             "line-width": [
               "case",
               ["boolean", ["feature-state", "selected"], false],
@@ -496,13 +469,6 @@ export default function Map({ filters, selectedId, onSelect, contributions }: Pr
       }
     }
 
-    // Stash so the theme-change effect can rehydrate overlays after
-    // setStyle without re-fetching the GeoJSON.
-    reAddOverlaysRef.current = () => {
-      if (datasetRef.current) addOverlays(datasetRef.current);
-      addContributionLayers(contributionsRef.current);
-    };
-
     map.on("load", async () => {
       try {
         const res = await fetch("/data/up-buildings.geojson");
@@ -568,7 +534,6 @@ export default function Map({ filters, selectedId, onSelect, contributions }: Pr
       geolocateRef.current = null;
       featuresByIdRef.current.clear();
       datasetRef.current = null;
-      reAddOverlaysRef.current = null;
       map.remove();
       mapRef.current = null;
     };
@@ -588,58 +553,6 @@ export default function Map({ filters, selectedId, onSelect, contributions }: Pr
     const src = map.getSource(CONTRIB_SOURCE_ID) as GeoJSONSource | undefined;
     if (src) src.setData(fc);
   }, [contributions]);
-
-  // Swap the basemap when the theme changes. setStyle wipes everything we
-  // added (buildings + directions plugin layers), so we tear down the
-  // directions service (next route request rebuilds it) and re-add the
-  // building overlay layers once the new style finishes parsing.
-  useEffect(() => {
-    if (themeRef.current === theme) return;
-    const map = mapRef.current;
-    if (!map) {
-      themeRef.current = theme;
-      return;
-    }
-    themeRef.current = theme;
-
-    routeAbortRef.current?.abort();
-    routeAbortRef.current = null;
-    try {
-      directionsServiceRef.current?.destroy();
-    } catch {
-      // noop
-    }
-    directionsServiceRef.current = null;
-    mapBus.dispatch("clearRoute", undefined);
-
-    overlayReadyRef.current = false;
-
-    // setStyle with diff:false is a full style replacement — every source
-    // and layer (including ours) is wiped. We poll 'styledata' instead of
-    // listening once: 'styledata' can fire mid-transition (e.g., from old
-    // style teardown) before the new Style is ready, and isStyleLoaded()
-    // is the only reliable signal that addSource/addLayer will stick.
-    // Layer-keyed click delegations live on the Map (not the Style) and
-    // check getLayer(id) at click time, so they re-bind automatically once
-    // the new FILL_LAYER is added.
-    const tryReAdd = () => {
-      if (!map.isStyleLoaded()) return;
-      map.off("styledata", tryReAdd);
-      map.off("idle", tryReAdd);
-      reAddOverlaysRef.current?.();
-      applyFilterRef.current?.();
-      const sel = lastSelectedIdRef.current;
-      if (sel !== null && map.getSource(SOURCE_ID)) {
-        map.setFeatureState({ source: SOURCE_ID, id: sel }, { selected: true });
-      }
-      overlayReadyRef.current = true;
-    };
-    map.on("styledata", tryReAdd);
-    // Belt-and-braces: idle is guaranteed to fire once the new style is
-    // settled, even if no styledata event surfaces an isStyleLoaded()=true.
-    map.on("idle", tryReAdd);
-    map.setStyle(basemapUrlFor(theme), { diff: false });
-  }, [theme]);
 
   // Contribution-point click → ephemeral popup. Doesn't drive the bottom
   // sheet (those rows aren't part of the canonical dataset yet) but lets
